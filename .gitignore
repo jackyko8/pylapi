@@ -1,3 +1,15 @@
+# Project related
+alpha/
+poc/
+**/outcome/
+tmp/
+_[a-zA-Z0-9]*
+._*
+
+# Platform related
+.c9
+.DS_Store
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
