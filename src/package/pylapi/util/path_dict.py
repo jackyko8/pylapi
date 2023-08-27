@@ -17,7 +17,7 @@ def _path_str(path):
     return dotted_path
 
 
-class pathDict(ABC):
+class PathDict(ABC):
     def __init__(self, data) -> None:
         self._data = data
 
@@ -59,7 +59,7 @@ class pathDict(ABC):
         # if type(self._data[path]) != pathDict:
         #     return self._data[path]
         # else:
-        #     val = pathDict(self._data[path])
+        #     val = PathDict(self._data[path])
         #     if val != None:
         #         return val
         #     else:

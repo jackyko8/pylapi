@@ -1,8 +1,4 @@
 # Project related
-alpha/
-poc/
-**/outcome/
-tmp/
 _[a-zA-Z0-9]*
 ._*
 

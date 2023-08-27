@@ -9,13 +9,12 @@ from typing import Any
 from copy import deepcopy
 from http import HTTPStatus
 
-from .common.attr_dict import *
-from .common.classproperty import *
-from .common.config import *
-from .common.error import *
-from .common.logger_util import *
-from .common.path_dict import *
-from .common.util import *
+from .util.attr_dict import *
+from .util.classproperty import *
+from .util.config import *
+from .util.error import *
+from .util.logger_util import *
+from .util.path_dict import *
 
 
 # Convert path of int and slice types to str type to be used in dotted_dict
@@ -30,6 +29,13 @@ def _path_str(path):
         step = dotted_path.step if dotted_path.step != None else ""
         dotted_path = f"$[{start}:{stop}:{step}]"
     return dotted_path
+
+
+class PyLapiError(Exception):
+    def __init__(self, api_response: dict):
+        self.api_response = api_response
+        self.message = "API response: " + str(self.api_response)
+        super().__init__(self.message)
 
 
 class PyLapi(ABC):
@@ -55,12 +61,15 @@ class PyLapi(ABC):
     _pylapi_log_level = config_log_level
     _pylapi_deep_log_level = config_deep_log_level
 
-    def __init__(self, resource_data: dict = None) -> None:
+    def __init__(self, resource_data: dict = None, allow_api_raise=False) -> None:
         super().__init__()
         logger.debug(f"PyLapi.__init__(")
         logger.debug(f"    resource_data={resource_data},")
         logger.debug(f")")
         # logger.debug(f"for class {self.__class__.__dict__}")
+
+        # Error handling
+        self._allow_api_raise = allow_api_raise
 
         # Object attributes
         self._resource_data = resource_data if resource_data else {}
@@ -84,14 +93,14 @@ class PyLapi(ABC):
         _data = data if data else self._resource_data
         if type(rewrite) == str:
             # A path to data
-            return pathDict(_data)[rewrite]
+            return PathDict(_data)[rewrite]
 
         rewrite_str = json.dumps(rewrite)
         rewrite_var_names = re.findall(r'"(\$[^"]*)"', rewrite_str)
         logger.debug(f"rewrite_var_names={rewrite_var_names}")
         for rewrite_var_name in rewrite_var_names:
             logger.debug(f"rewrite_var_name={rewrite_var_name}")
-            rewrite_var_value = pathDict(_data)[rewrite_var_name]
+            rewrite_var_value = PathDict(_data)[rewrite_var_name]
             if type(rewrite_var_value) == str:
                 rewrite_var_value = f'"{rewrite_var_value}"'
             elif type(rewrite_var_value) in (dict, list):
@@ -266,7 +275,7 @@ class PyLapi(ABC):
 
     def __getitem__(self, path) -> Any:
         # logger.debug(f"__getitem__: {path}")
-        item = pathDict(self._resource_data)[_path_str(path)]
+        item = PathDict(self._resource_data)[_path_str(path)]
         if type(item) == dict:
             item = deepcopy(item)
         return item
@@ -282,12 +291,12 @@ class PyLapi(ABC):
         if path == "" or path == "$" or path == "$.":
             self._resource_data = _value
         else:
-            pathDict(self._resource_data)[_path_str(path)] = _value
+            PathDict(self._resource_data)[_path_str(path)] = _value
 
 
     def __delitem__(self, path) -> None:
         # logger.debug(f"__delitem__: {type(path)} {path}")
-        del pathDict(self._resource_data)[_path_str(path)]
+        del PathDict(self._resource_data)[_path_str(path)]
 
 
     # def __getattr__(self, attr) -> Any:
@@ -363,6 +372,15 @@ class PyLapi(ABC):
     #
 
     @property
+    def allow_api_raise(self) -> dict:
+        return self._allow_api_raise
+
+    @allow_api_raise.setter
+    def allow_api_raise(self, _allow_api_raise: bool):
+        self._allow_api_raise = _allow_api_raise
+
+
+    @property
     def resource_name(self) -> str:
         # logger.debug(f"get resource_name: {self._resource_name}")
         return self._resource_name
@@ -409,7 +427,7 @@ class PyLapi(ABC):
 
     @property
     def data(self) -> dict:
-        return attrDict(self._resource_data)
+        return AttrDict(self._resource_data)
 
 
     # @classproperty
@@ -810,10 +828,15 @@ class PyLapi(ABC):
                 self._response = request_func(**self._request)
                 self.setLogLevel()
 
-                response_data = json.loads(self._response.text)
+                self._response_data = json.loads(self._response.text)
                 # Only select the give path and load path if no error
-                if self.response_ok():
-                    logger.debug(f"response_data={response_data}")
+
+                if not self.response_ok():
+                    if self._allow_api_raise:
+                        raise PyLapiError(self._response_data)
+                    # else skip the load and give, then let response callback to handle the error
+                else:
+                    logger.debug(f"self._response_data={self._response_data}")
                     # Process `load` first as `give` processing will alter `response_json`
 
                     # Load `load` element into the object
@@ -822,27 +845,25 @@ class PyLapi(ABC):
                     # load=="..." means to load the path
                     if load != None:
                         logger.debug(f"load={load}")
-                        self[""] = self._rewrite_data(load, response_data)
+                        self[""] = self._rewrite_data(load, self._response_data)
                         # if load == "":
-                        #     self[""] = response_data
-                        # elif load in response_data:
-                        #     self[""] = response_data[load]
+                        #     self[""] = self._response_data
+                        # elif load in self._response_data:
+                        #     self[""] = self._response_data[load]
                         # else:
-                        #     raise Exception(f"Load path {load} cannot be found in the API response: {response_data}")
+                        #     raise Exception(f"Load path {load} cannot be found in the API response: {self._response_data}")
 
                     # Function returns only the `give` element
                     # give==None means to return nothing
                     # give=="" means to return the whole object
                     # load=="..." means to return the path
                     if give == None:
-                        response_data = None
+                        self._response_data = None
                     else:
                         logger.debug(f"give={give}")
-                        response_data = self._rewrite_data(give, response_data)
-                        # response_data = response_data[give] if give in response_data else {}
-                        # logger.debug(f"response_data={response_data}")
-
-                self._response_data = response_data
+                        self._response_data = self._rewrite_data(give, self._response_data)
+                        # self._response_data = self._response_data[give] if give in self._response_data else {}
+                        # logger.debug(f"self._response_data={self._response_data}")
 
                 logger.debug(f"Check response callback {method.__qualname__}.response")
                 if "response" in cls._pylapi_callbacks[method.__qualname__]:

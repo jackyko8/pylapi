@@ -1,5 +1,13 @@
 # Release Notes
 
+Version 0.9 2023-08-27
+- Factorise pylapi_gen.py into functions
+- Improve pylapi_gen.py: usage, getopt, guide_attrs, deref, request_body
+- Add PyLapiError and allow_api_raise
+- Rename common to util
+- Standardise upper CamelCase for class names
+- Recommend requirements.txt
+
 Version 0.8 2023-08-25
 - Rename package
 - Tidy up directory structure

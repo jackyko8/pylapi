@@ -4,7 +4,7 @@ import json
 from .logger_util import *
 
 
-class attrDict(ABC):
+class AttrDict(ABC):
     def __init__(self, data) -> None:
         self._data = data
         data_type = type(self._data)
@@ -58,7 +58,7 @@ class attrDict(ABC):
         # logger.debug(f"__getattr__: {type(attr)} {attr}")
         if attr in self._data:
             if type(self._data[attr]) in (dict, list):
-                return attrDict(self._data[attr])
+                return AttrDict(self._data[attr])
             else:
                 return self._data[attr]
         else:
@@ -90,7 +90,7 @@ class attrDict(ABC):
         if type(self._data[path]) not in (dict, list):
             return self._data[path]
         else:
-            val = attrDict(self._data[path])
+            val = AttrDict(self._data[path])
             if val != None:
                 return val
             else:

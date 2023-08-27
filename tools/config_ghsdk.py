@@ -1,23 +1,29 @@
 # GhSDK Generator Configuration
 
 # The OpenAPI specifiation file in JSON
-oas = "./alpha/github/api.github.com.json"
+oas_file_name = "./examples/ghsdk/api.github.com.json"
 
 # The authentication type prepended to the access credential
 api_auth_type = "Bearer"
 
-# The PyLapi SDK class name (the comment parent of all Resource classes)
-sdk_class_name = "GhSDK"
+# The API Server URL
+# Default oas.server[0].url
+# api_url = "https://api.example.com"
 
-# Optional Python statements appended to the standard SDK class __init__()
-# sdk_class_init = """
+# The PyLapi API class name (the comment parent of all Resource classes)
+# Default oas.info.title
+api_class_name = "GhSDK"
+
+# Optional Python statements appended to the standard API class __init__()
+# Please start the statements on the left without extra indentation.
+# api_class_init = """
 # """
 
-# Optional methods in the SDK class (to be inherited by all resource classes)
-# sdk_methods = """
+# Optional methods in the API class (to be inherited by all resource classes)
+# api_methods = """
 # """
 
-# Optional resource_method decorator arguments
+# Optional resource_method decorator arguments (applied to all resource methods in the SDK)
 # For example, {"send": {"data": "$"}, "give": "$.data"}
 # resource_method_args = {}
 
@@ -58,7 +64,7 @@ class Method():
         return MagicWords(MagicWords(self._path_items[0]).singular).upperCamel + "Resource"
 
     # Resource Name used to create a resource object:
-    # my_resource = MySDK.resource("example_resource")
+    # my_resource = MyAPI.resource("example_resource")
     # Example: Singular snake case for resource names
     @property
     def resource_name(self):
@@ -121,3 +127,7 @@ class Method():
     @property
     def parameters(self):
         return self._method["parameters"]
+
+    @property
+    def request_body(self):
+        return self._method["request_body"]

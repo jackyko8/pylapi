@@ -1,13 +1,11 @@
 from .pylapi import *
 
-from .common.attr_dict import *
-from .common.classproperty import *
-from .common.config import *
-from .common.decimal_encoder import *
-from .common.dotted_dict import *
-from .common.error import *
-from .common.logger_util import *
-from .common.magic_words import *
-from .common.path_dict import *
-from .common.util import *
-
+from .util.attr_dict import *
+from .util.classproperty import *
+from .util.config import *
+from .util.decimal_encoder import *
+from .util.dotted_dict import *
+from .util.error import *
+from .util.logger_util import *
+from .util.magic_words import *
+from .util.path_dict import *
