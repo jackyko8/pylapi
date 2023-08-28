@@ -3,7 +3,7 @@
 # This script generates a PyLapi API from a configuration file.
 #
 # Steps:
-# 1. Create a configuration file (from the configuration template python file) in the *same* directory as this script.
+# 1. Create a configuration file from the configuration template.
 # 2. Customise the configuration file by following the insturctions in the comment.
 # 3. Run this script with the configuration file as the first argument
 #    - The OpenAPI specification JSON file is specified
@@ -19,12 +19,13 @@ import sys
 import os
 from getopt import getopt, GetoptError
 from pylapi import PathDict
+from pylapi import MagicWords
 
 # Defaults
 debug = False
-output = sys.stdout
 oas_spec = {}
-guide_attrs = set()
+output_py = None
+guide_attrs = None
 
 # Default
 all_guide_attrs = {
@@ -41,8 +42,120 @@ control_guide_attrs = {
 
 valid_guide_attrs = all_guide_attrs.union(control_guide_attrs)
 
-
 main_basename = os.path.basename(sys.argv[0])
+
+# For naming conversion, use MagicWords(name).<conversion>, where <conversion> can be
+# snake, kebab, pascal (upperCamel), camel (lowerCamel), or singular
+# e.g., MagicWords("ThisIs a good_test for magic-words_conversion.").snake
+#       Output: this_is_a_good_test_for_magic_words_conversion
+def snake(phrase): return MagicWords(phrase).snake
+def kebab(phrase): return MagicWords(phrase).kebab
+def upperCamel(phrase): return MagicWords(phrase).upperCamel
+def lowerCamel(phrase): return MagicWords(phrase).lowerCamel
+def pascal(phrase): return MagicWords(phrase).pascal
+def camel(phrase): return MagicWords(phrase).camel
+def singular(phrase): return MagicWords(phrase).singular
+
+
+class Method():
+    def __init__(self, config, method):
+        self.config = config
+        self.method = method
+        self.path_items = self.method["path"].split("/")
+
+    def __repr__(self):
+        return str(self.method)
+
+    @property
+    def api_path(self):
+        _api_path = "/" + self.class_path if self.class_path else ""
+        _api_path += "/" + self.resource_path if self.resource_path else ""
+        return _api_path
+
+    ########################################
+    #
+    # Derived attributes - customisables
+    #   These attributes are derived from the original OpenAPI JSON
+    #   attributes as described in the next section.
+    #
+
+    @property
+    def class_name(self):
+        # return MagicWords(MagicWords(self.path_items[0]).singular).upperCamel + "Resource"
+        return eval(self.config.naming["class_name"].replace("$", "self"))
+
+    # Resource Name used to create a resource object:
+    # my_resource = MyAPI.resource("example_resource")
+    # Example: Singular snake case for resource names
+    @property
+    def resource_name(self):
+        # return MagicWords(MagicWords(self.path_items[0]).singular).snake
+        return eval(self.config.naming["resource_name"].replace("$", "self"))
+
+    # API path prefix for all methods in the class
+    # API full path is {class_path}/{resource_path}
+    # Example: resources in /resources/api_method/...
+    # IMPORTANT: Make sure the class_path is common to all methods in the class.
+    @property
+    def class_path(self):
+        # return self._path_items[0]
+        # return ""
+        return eval(self.config.naming["class_path"].replace("$", "self"))
+
+    # API path suffix for the method
+    # API full path is {class_path}/{resource_path}
+    # Example: api_method in /resources/api_method/...
+    @property
+    def resource_path(self):
+        # return "/".join(self._path_items[1:])
+        # return "/".join(self.path_items)
+        return eval(self.config.naming["resource_path"].replace("$", "self"))
+
+    # Method Name
+    # def exampleMethod(self):
+    # Example: Lower Camel case for method names
+    @property
+    def method_name(self):
+        # return MagicWords(self.operation_id).lowerCamel
+        return eval(self.config.naming["method_name"].replace("$", "self"))
+
+
+    ########################################
+    #
+    # Initialised attributes - not to be customised
+    #   These attributes are captured from the
+    #   OpenAPI JSON file, and returned without
+    #   conversion (except http_method to uppercase).
+    #
+    @property
+    def path(self):
+        return self.method["path"]
+
+    @property
+    def http_method(self):
+        return self.method["http_method"].upper()
+
+    @property
+    def operation_id(self):
+        return self.method["operation_id"]
+
+    # The followings are used for documentation in the generated file.
+    # Comment out, or return blank, None, or False to suppress.
+    @property
+    def summary(self):
+        return self.method["summary"]
+
+    @property
+    def description(self):
+        return self.method["description"]
+
+    @property
+    def parameters(self):
+        return self.method["parameters"]
+
+    @property
+    def request_body(self):
+        return self.method["request_body"]
 
 
 def usage(exit_code=0):
@@ -66,7 +179,7 @@ def printe(err):
 
 
 def printl(line=""):
-    print(line.rstrip(), file=output)
+    print(line.rstrip(), file=output_py)
 
 
 def get_oas_spec(oas_file_name):
@@ -129,7 +242,7 @@ def get_methods(config, oas_paths):
                 raise Exception(f"operationId missing in {oas_path}:{oas_http_method}")
             # print(f"{oas_http_method.upper()} {oas_path}")
             # All attributes of `method_to_add` must be defined, even if not in OAS
-            method_to_add = config.Method({
+            method_to_add = Method(config, {
                 "path": oas_path.lstrip("/"),
                 "http_method": oas_http_method,
                 "operation_id": oas_method["operationId"],
@@ -362,7 +475,7 @@ def gen_resource_classes(config, methods, classes):
 
 def main():
     global debug
-    global output
+    global output_py
     global oas_spec
     global guide_attrs
 
@@ -371,6 +484,7 @@ def main():
     # Arguments and configuration
     #
 
+    # Getopt - cannot load config for defaults until after getopt
     try:
         opts, args = getopt(sys.argv[1:], "hdo:g:", ["help", "debug", "output=", "guide="])
     except GetoptError as err:
@@ -383,7 +497,7 @@ def main():
         elif _o in ("-d", "--debug"):
             debug = True
         elif _o in ("-o", "--output"):
-            output = open(_a, "w")
+            output_py = open(_a, "w")
         elif _o in ("-g", "--guide"):
             guide_attrs = set(_a.split(","))
             unknown_specs = []
@@ -406,11 +520,12 @@ def main():
 
     config_file = args[0]
 
-    config_module = re.sub(r"\.py$", "", os.path.basename(config_file))
+    config_module_name = re.sub(r"\.py$", "", os.path.basename(config_file))
+    sys.path.append(os.path.dirname(config_file))
     import importlib
-    config = importlib.import_module(config_module)
+    config = importlib.import_module(config_module_name)
 
-    oas_file_name = f"{config_module}.json"  # Default OpenAI definition
+    oas_file_name = f"{config_module_name}.json"  # Default OpenAI definition
     if len(args) >= 2:
         # openapi.json specified
         oas_file_name = args[0]
@@ -421,6 +536,18 @@ def main():
         except:
             # Use default
             pass
+
+    if output_py == None:
+        try:
+            output_py = open(config.output_py_name, "w")
+        except:
+            output_py = sys.stdout
+
+    if guide_attrs == None:
+        try:
+            guide_attrs = config.guide_attrs
+        except:
+            guide_attrs = set()
 
 
     ############################################################

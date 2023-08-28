@@ -5,7 +5,8 @@ class MagicWords(ABC):
     def __init__(self, phrase: str):
         self.phrase = phrase
         _phrase = phrase
-        _phrase = re.sub(r"[-_./]", " ", _phrase)
+        # _phrase = re.sub(r"[-_./]", " ", _phrase)
+        _phrase = re.sub(r"[^a-zA-Z0-9]", " ", _phrase)
         _phrase = re.sub(r"([A-Z])", " \\1", _phrase)
         _phrase = re.sub(r" +", " ", _phrase)
         _phrase = _phrase.strip()

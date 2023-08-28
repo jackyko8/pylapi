@@ -1,5 +1,10 @@
 # Release Notes
 
+Version 0.10 2023-08-28
+- Move non-customisable code from pylapi_config_template.py to pylapi_gen.py
+- Add more customisations into pylapi_config_template.py
+- Generalise the config module location (not having to be with the gen script)
+
 Version 0.9 2023-08-27
 - Factorise pylapi_gen.py into functions
 - Improve pylapi_gen.py: usage, getopt, guide_attrs, deref, request_body
