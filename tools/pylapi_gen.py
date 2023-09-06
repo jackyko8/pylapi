@@ -4,30 +4,30 @@
 #
 # Steps:
 # 1. Create a configuration file from the configuration template.
-# 2. Customise the configuration file by following the insturctions in the comment.
-# 3. Run this script with the configuration file as the first argument
-#    - The OpenAPI specification JSON file is specified
-#      - as the second argument, or if not specified
-#      - in the configuration file `oas` variable, or if not specified
-#      - as the configuration file name with .py replaced by .json
-#    - The OpenAPI JSON file path is either absolute or relative to the current directory.
+# 2. Customise the configuration file by following the instructions in the comment.
+# 3. Run this script with the configuration file as the first argument.
+#   - The OpenAPI specification JSON file is specified
+#     - as the second argument, or if not specified
+#     - in the configuration file `oas` variable, or if not specified
+#     - as the configuration file name, with .py replaced by .json
+#   - The OpenAPI JSON file path is either absolute or relative to the current directory.
 
 import json
 import yaml
 import re
 import sys
 import os
+from enum import IntEnum
 from getopt import getopt, GetoptError
-from pylapi import PathDict
-from pylapi import MagicWords
+from pylapi import PathDict, MagicWords
 
 # Defaults
 debug = False
 oas_spec = {}
 output_py = None
+output_py_name = None
 guide_attrs = None
 
-# Default
 all_guide_attrs = {
     "summary",
     "description",
@@ -40,9 +40,24 @@ control_guide_attrs = {
     "all",
 }
 
+main_basename = os.path.basename(sys.argv[0])
+
+def usage(exit_code=0):
+    print(f"""Usage: {main_basename} [options ...] <config.py> [<openapi.json/yaml]
+\t-h --help           Print this help message
+\t-d --debug          Print all the methods to be generated then stop
+\t-o --output=<file>  Output the API SDK to <file> instead of stdout
+\t-g --guide=<list>   Include some OpenAI attributes as comments; the list is comma-deliminted list with no spaces.
+\t                    Valid attributes include: summary,description,parameters,request_body,all,ref
+\t                    `all` means to include all items on the list
+\t                    `ref` means to dereference $ref cells in OpenAI attributes""", file=sys.stderr)
+    exit(exit_code)
+
+
 valid_guide_attrs = all_guide_attrs.union(control_guide_attrs)
 
-main_basename = os.path.basename(sys.argv[0])
+code_rewrite_lines = []
+snippets = PathDict({})
 
 # For naming conversion, use MagicWords(name).<conversion>, where <conversion> can be
 # snake, kebab, pascal (upperCamel), camel (lowerCamel), or singular
@@ -158,28 +173,17 @@ class Method():
         return self.method["request_body"]
 
 
-def usage(exit_code=0):
-    print(f"""Usage: {main_basename} <config.py> [<openapi.json/yaml]
-\t-h --help           Print this help message
-\t-d --debug          Print all the methods to be generated then stop
-\t-o --output=<file>  Output to <file> instead of stdout
-\t-g --guide=<list>   Include some OpenAI attributes as comments; the list is comma-deliminted list with no spaces.
-\t                    Valid attributes include: summary,description,parameters,request_body,all,ref
-\t                    `all` means to include all items on the list
-\t                    `ref` means to dereference $ref cells in OpenAI attributes""", file=sys.stderr)
-    exit(exit_code)
-
-
 def dict_checked(dict_data, attr, default=""):
     return dict_data[attr] if attr in dict_data else default
 
 
-def printe(err):
+def print_error(err):
     print(err, file=sys.stderr)
 
 
-def printl(line=""):
-    print(line.rstrip(), file=output_py)
+def print_line(line=""):
+    if line != None:
+        print(line.rstrip(), file=output_py)
 
 
 def get_oas_spec(oas_file_name):
@@ -209,7 +213,7 @@ def set_config(config, _oas_spec):
 
     # config.api_class_name fallback on oas.info.title
     try:
-        api_class_name = config.api_class_name  # A trivial check
+        _ = config.api_class_name  # A trivial check
     except:
         try:
             api_class_name = _oas_spec["info"]["title"]
@@ -228,6 +232,109 @@ def set_config(config, _oas_spec):
             raise Exception(f"API URL cannot be determined: Neither in config and nor in OpenAI specification")
         else:
             config.api_url = api_url
+
+
+class RewriteExpect(IntEnum):
+    CLASS_API = 0
+    CLASS_DECO = 1
+    CLASS_DEF = 2
+    METHOD_DECO = 3
+    METHOD_DEF = 4
+
+def get_code_rewrite(config, code_rewrite_file_name):
+    global snippets
+    global code_rewrite_lines
+
+    if not code_rewrite_file_name:
+        return
+
+    code_rewrite_lines = [_.rstrip() for _ in open(code_rewrite_file_name, "r").readlines()]
+    # print(len(code_rewrite_lines))
+
+    # {"resource": (slice_from, slice_to)}
+    # where "resource" being one of these:
+    # "" - opening lines
+    # "{method.class_name}" - a class
+    # "{method.class_name}.{method.method_name}" - a method
+    # If "resource" is "", expect a class, else except a class or a method
+
+    this_snippet = "@"  # Opening
+    this_class = ""  # Current class the line is in
+    this_slice = [0]
+    snippets[this_snippet] = this_slice
+    expect = (RewriteExpect.CLASS_API, RewriteExpect.CLASS_DECO)
+    line = -1  # In case the file is empty
+    for line in range(len(code_rewrite_lines)):
+        # print(f"line {line}")
+        code_rewrite_line = code_rewrite_lines[line]
+        # Strategy: Most frequent cases checked first
+        if RewriteExpect.METHOD_DECO in expect:
+            if re.findall(rf"^\s*@{config.api_class_name}\.resource_method", code_rewrite_line):
+                # print(f"MDC {line+1}: {code_rewrite_line}")
+                this_slice.append(line)  # Complete `this` first
+                snippets[this_snippet] = this_slice
+                this_slice = [line]  # Mark the new
+                expect = (RewriteExpect.METHOD_DEF,)
+                # print(f"expect {expect}")
+                continue
+        if RewriteExpect.METHOD_DEF in expect:
+            method_name = re.findall(rf"^\s*def\s+([^(]+)\(", code_rewrite_line)
+            if len(method_name):
+                # print(f"MDF {line+1}: {code_rewrite_line}")
+                method_name = method_name[0]
+                this_snippet = f"{this_class}.{method_name}"
+                expect = (RewriteExpect.METHOD_DECO, RewriteExpect.CLASS_DECO)
+                # print(f"expect {expect}")
+                continue
+        if RewriteExpect.CLASS_DECO in expect:
+            if re.findall(rf"^\s*@{config.api_class_name}\.resource_class", code_rewrite_line):
+                # print(f"CDC {line+1}: {code_rewrite_line}")
+                this_slice.append(line)  # Complete `this` first
+                snippets[this_snippet] = this_slice
+                this_slice = [line]  # Mark the new
+                expect = (RewriteExpect.CLASS_DEF,)
+                # print(f"expect {expect}")
+                continue
+        if RewriteExpect.CLASS_DEF in expect:
+            class_name = re.findall(rf"^\s*class\s+([^(]+)\(", code_rewrite_line)
+            if len(class_name):
+                # print(f"CDF {line+1}: {code_rewrite_line}")
+                this_class = class_name[0]
+                this_snippet = f"{this_class}.@"
+                expect = (RewriteExpect.METHOD_DECO, RewriteExpect.CLASS_DECO)
+                # print(f"expect {expect}")
+                continue
+        if RewriteExpect.CLASS_API in expect:
+            if re.findall(rf"^\s*class {config.api_class_name}\(", code_rewrite_line):
+                # print(f"API {line+1}: {code_rewrite_line}")
+                this_slice.append(line)  # Complete `this` first
+                snippets[this_snippet] = this_slice
+                this_slice = [line]  # Mark the new
+                this_snippet = f"{config.api_class_name}.@"
+                expect = (RewriteExpect.CLASS_DECO,)
+                # print(f"expect {expect}")
+                continue
+
+    # Complete the last snippet
+    this_slice.append(line+1)
+    snippets[this_snippet] = this_slice
+
+
+def rewrite_me(snippet_name, intro_line=None):
+    _intro_line = None
+    _code_lines = None
+    _co = ""
+    if snippet_name in snippets:
+        _code_lines = "\n".join(code_rewrite_lines[slice(*snippets[snippet_name])])
+        if intro_line and _code_lines.rstrip():
+            leading_spaces = re.findall(r"^(\s*)\S", _code_lines)
+            line_indent = ""
+            if len(leading_spaces):
+                line_indent = leading_spaces[0]
+            _intro_line = f"{line_indent}# {intro_line}"
+        _co = "# "
+        del snippets[snippet_name]
+    return _intro_line, _code_lines, _co
 
 
 def get_methods(config, oas_paths):
@@ -251,9 +358,13 @@ def get_methods(config, oas_paths):
                 "parameters": [
                     {
                         _["name"]: {
-                            "required": dict_checked(_, "required", False),
                             "in": dict_checked(_, "in"),
                             "description": dict_checked(_, "description"),
+                            "required": dict_checked(_, "required", False),
+                            "example": dict_checked(_, "example"),
+                            "schema": dict_checked(_, "schema"),
+                            "style": dict_checked(_, "style"),
+                            "explode": dict_checked(_, "explode", False),
                         } for _ in oas_method["parameters"] if "name" in _
                     }
                 ] if "parameters" in oas_method else [],
@@ -282,72 +393,81 @@ def gen_header(config, methods):
             }
         })
 
-    printl(f"# PyLapi API generated by {main_basename}")
-    printl(f"#")
-    printl(f"# API Class: {config.api_class_name}")
-    printl(f"# {len(classes)} Resource Classes (number of methods):")
+    print_line(f"# PyLapi API generated by {main_basename}")
+    print_line(f"#")
+    print_line(f"# API Class: {config.api_class_name}")
+    print_line(f"# {len(classes)} Resource Classes (number of native methods):")
     for _ in classes:
-        printl(f"#      {_} ({classes[_]['count']})")
-    printl(f"# Total: {len(methods)} methods")
+        print_line(f"#      {_} ({classes[_]['count']})")
+    print_line(f"# Total: {len(methods)} methods")
+    print_line()
 
     if debug:
         # Output OpenAI analysis then exit
-        printl(f"#")
+        print_line(f"#")
         ii = 0
         for method in methods:
             ii += 1
-            printl(f"#{ii:4}. {method.class_name}:{method.method_name}(): {method.http_method} {method.path}")
+            print_line(f"#{ii:4}. {method.class_name}:{method.method_name}(): {method.http_method} {method.path}")
         exit(0)
 
     return classes
 
 
 def gen_api_class(config):
+    global snippets
+    global code_rewrite_lines
 
-    printl("""
-from pylapi import PyLapi, PyLapiError
-
-class """+config.api_class_name+"""(PyLapi):
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-        self.api_url = \""""+config.api_url+"""\"
-        self.api_auth_type = \""""+config.api_auth_type+"""\"
-
-        # Custom __init__ statements""")
+    api_auth_type = "Bearer"
     try:
-        for init_line in config.api_class_init.split("\n"):
-            printl(f"        {init_line}")
+        api_auth_type = config.api_auth_type
     except:
-        pass
-    printl()
+        config.api_auth_type = api_auth_type
 
-    printl(f"    # Custom {config.api_class_name} methods")
-    try:
-        for api_method in config.api_methods.split("\n"):
-            printl(f"    {api_method}")
-    except:
-        pass
-    printl()
+    intro_line, code_lines, co = rewrite_me("@", "Custom opening")
+    print_line(intro_line)
+    print_line(code_lines)
+
+    print_line("from pylapi import PyLapi, PyLapiError")
+    print_line()
+
+    intro_line, code_lines, co = rewrite_me(f"{config.api_class_name}.@", f"Custom API class: {config.api_class_name}(PyLapi)")
+    print_line(intro_line)
+    print_line(f"{co}class {config.api_class_name}(PyLapi):")
+    print_line(f"{co}    def __init__(self, *args, **kwargs) -> None:")
+    print_line(f"{co}        super().__init__(*args, **kwargs)")
+    print_line(f"{co}        self.api_url = \"{config.api_url}\"")
+    print_line(f"{co}        self.api_auth_type = \"{config.api_auth_type}\"")
+    print_line(code_lines)
+    print_line()
 
 
 def print_class(config, method, classes):
-        printl()
-        printl(f"@{config.api_class_name}.resource_class(\"{method.resource_name}\", \"{method.class_path}\")")
-        printl(f"class {method.class_name}({config.api_class_name}):")
-        # printl()
-        printl(f"# To instantiate: {config.api_class_name}.resource(\"{method.resource_name}\")")
-        printl(f"# Number of methods: {classes[method.class_name]['count']}")
-        for _ in classes[method.class_name]["methods"]:
-            printl(f"#     {_}")
+    print_line()
+
+    intro_line, code_lines, co = rewrite_me(f"{method.class_name}.@", f"Custom resource class: {method.class_name}({config.api_class_name})")
+    print_line(intro_line)
+    print_line(f"{co}@{config.api_class_name}.resource_class(\"{method.resource_name}\", \"{method.class_path}\")")
+    print_line(f"{co}class {method.class_name}({config.api_class_name}):")
+    print_line(code_lines)
+
+    print_line(f"# To instantiate: {config.api_class_name}.resource(\"{method.resource_name}\")")
+    print_line(f"# Number of native methods: {classes[method.class_name]['count']}")
+    for _ in classes[method.class_name]["methods"]:
+        print_line(f"#     {_}")
 
 
 def print_method(config, method, resource_method_args_str):
-    printl()
-    printl(f"    @{config.api_class_name}.resource_method(\"{method.resource_path}\", http_method=\"{method.http_method}\"{resource_method_args_str})")
-    printl(f"    def {method.method_name}(self): pass")
-    # printl()
-    printl(f"    # To call: {config.api_class_name}.resource(\"{method.resource_name}\").{method.method_name}(...)")
-    printl(f"    # {method.http_method} {config.api_url}{method.api_path}")
+    print_line()
+
+    intro_line, code_lines, co = rewrite_me(f"{method.class_name}.{method.method_name}", f"Custom resource method: {method.class_name}.{method.method_name}()")
+    print_line(intro_line)
+    print_line(f"    {co}@{config.api_class_name}.resource_method(\"{method.resource_path}\", http_method=\"{method.http_method}\"{resource_method_args_str})")
+    print_line(f"    {co}def {method.method_name}(self): pass")
+    print_line(code_lines)
+    print_line(f"    # To call: {config.api_class_name}.resource(\"{method.resource_name}\").{method.method_name}(...)")
+    print_line(f"    # {method.http_method} {config.api_url}{method.api_path}")
+    print_line()
 
 
 def print_guide(method):
@@ -382,7 +502,7 @@ def print_guide(method):
             pass
         else:
             if summary != None:
-                printl(f"    # {summary}")
+                print_line(f"    # {summary}")
 
     if "description" in guide_attrs:
         try:
@@ -394,7 +514,7 @@ def print_guide(method):
             pass
         else:
             if description != None:
-                printl(f"    # {description}")
+                print_line(f"    # {description}")
 
     if "parameters" in guide_attrs:
         try:
@@ -409,8 +529,8 @@ def print_guide(method):
             pass
         else:
             if parameters != None:
-                printl(f"    #")
-                printl(f"    # {parameters}")
+                print_line(f"    #")
+                print_line(f"    # {parameters}")
 
     if "request_body" in guide_attrs:
         try:
@@ -430,12 +550,12 @@ def print_guide(method):
             pass
         else:
             if rb_desc != None or rb_content != None:
-                printl(f"    #")
-                printl(f"    # Request Body:")
+                print_line(f"    #")
+                print_line(f"    # Request Body:")
                 if rb_desc != None:
-                    printl(f"    # {rb_desc}")
+                    print_line(f"    # {rb_desc}")
                 if rb_content != None:
-                    printl(f"    # {rb_content}")
+                    print_line(f"    # {rb_content}")
 
 
 def gen_resource_classes(config, methods, classes):
@@ -456,19 +576,28 @@ def gen_resource_classes(config, methods, classes):
     for method in methods:
         this_class_name = method.class_name
         if this_class_name != last_class_name:
-            if last_class_name != None and num_methods == 0:
-                printl("    pass")
-                printl()
+            if last_class_name != None:
+                # New custom methods of the class
+                if snippets[last_class_name]:
+                    # `snippets` can be changed in rewrite_me()
+                    for new_method in snippets[last_class_name].copy():
+                        intro_line, code_lines, co = rewrite_me(f"{last_class_name}.{new_method}", f"Custom new resource method: {last_class_name}.{new_method}()")
+                        print_line(intro_line)
+                        print_line(code_lines)
+                        num_methods += 1
+                if num_methods == 0:
+                    print_line("    pass")
+                    print_line()
             last_class_name = this_class_name
             num_methods = 0
             print_class(config, method, classes)
         num_methods += 1
         print_method(config, method, resource_method_args_str)
         print_guide(method)
-        printl()
+        # print_line()
 
     if last_class_name and num_methods == 0:
-        printl("    pass")
+        print_line("    pass")
 
     return resource_method_args_str
 
@@ -488,7 +617,7 @@ def main():
     try:
         opts, args = getopt(sys.argv[1:], "hdo:g:", ["help", "debug", "output=", "guide="])
     except GetoptError as err:
-        printe(err)
+        print_error(err)
         usage(2)
 
     for _o, _a in opts:
@@ -497,7 +626,11 @@ def main():
         elif _o in ("-d", "--debug"):
             debug = True
         elif _o in ("-o", "--output"):
-            output_py = open(_a, "w")
+            if _a == "-":
+                output_py = sys.stdout
+            else:
+                output_py_name = _a
+                output_py = open(_a, "w")
         elif _o in ("-g", "--guide"):
             guide_attrs = set(_a.split(","))
             unknown_specs = []
@@ -505,41 +638,35 @@ def main():
                 if _ not in valid_guide_attrs:
                     unknown_specs.append(_)
             if unknown_specs != []:
-                printe(f"Unknown guide options: {', '.join(unknown_specs)}")
+                print_error(f"Unknown guide options: {', '.join(unknown_specs)}")
                 usage(2)
             if "all" in guide_attrs:
                 # Cannot copy over guide_attrs as "ref" may be in
                 guide_attrs = guide_attrs.union(all_guide_attrs)
                 guide_attrs.remove("all")
         else:
-            printe("Invalid option: {_o}")
+            print_error("Invalid option: {_o}")
             usage(2)
 
     if len(args) < 1 or len(args) > 2:
         usage(1)
 
+    # Load config file
     config_file = args[0]
-
+    config_dirname = os.path.dirname(config_file)
     config_module_name = re.sub(r"\.py$", "", os.path.basename(config_file))
-    sys.path.append(os.path.dirname(config_file))
+    sys.path.append(config_dirname)
     import importlib
     config = importlib.import_module(config_module_name)
 
-    oas_file_name = f"{config_module_name}.json"  # Default OpenAI definition
-    if len(args) >= 2:
-        # openapi.json specified
-        oas_file_name = args[0]
-    else:
-        try:
-            # Use config.oas if defined
-            oas_file_name = config.oas_file_name
-        except:
-            # Use default
-            pass
-
+    # Process defaults
     if output_py == None:
         try:
-            output_py = open(config.output_py_name, "w")
+            output_py_name = config.output_py_name
+            if output_py_name[0] == "." and config_dirname:
+                # Relative path
+                output_py_name = f"{config_dirname}/{output_py_name}"
+            output_py = open(output_py_name, "w")
         except:
             output_py = sys.stdout
 
@@ -549,6 +676,34 @@ def main():
         except:
             guide_attrs = set()
 
+    # Process OAS file
+    oas_file_name = f"{config_module_name}.json"  # Default OpenAI definition
+    if len(args) >= 2:
+        # openapi.json specified
+        oas_file_name = args[0]
+    else:
+        try:
+            # Use config.oas if defined
+            oas_file_name = config.oas_file_name
+            if oas_file_name[0] == "." and config_dirname:
+                # Relative path
+                oas_file_name = f"{config_dirname}/{oas_file_name}"
+        except:
+            # Use default
+            pass
+
+    # Process Code Rewrite file
+    code_rewrite_file_name = ""
+    try:
+        # Use config.oas if defined
+        code_rewrite_file_name = config.code_rewrite_file_name
+        if code_rewrite_file_name[0] == "." and config_dirname:
+            # Relative path
+            code_rewrite_file_name = f"{code_rewrite_file_name}/{oas_file_name}"
+    except:
+        # Use default
+        pass
+
 
     ############################################################
     #
@@ -557,11 +712,14 @@ def main():
 
     oas_spec = get_oas_spec(oas_file_name)
     set_config(config, oas_spec)
+    get_code_rewrite(config, code_rewrite_file_name)
     methods = get_methods(config, oas_spec["paths"])
     classes = gen_header(config, methods)
     gen_api_class(config)
     gen_resource_classes(config, methods, classes)
 
+    if output_py_name:
+        print(f"{config.api_class_name} generated and saved in {output_py_name}")
 
 if __name__ == "__main__":
     main()

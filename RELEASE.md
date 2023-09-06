@@ -1,5 +1,16 @@
 # Release Notes
 
+Version 0.11 2023-09-06
+- Code Rewrite in pylapi_gen
+- Add more parameters guides
+- Combine dotted_dict with path_dict
+- Remove path_str from pylapi.py
+- Convert AttrDict and PathDict to dict before rewrite
+- Remove unnecessary util files and move the rest to be with pylapi.py
+- Remove @classproperty as @property already covers this in Python 3.x (must use object, not class syntax in calls)
+- Add recursive del_attr()
+- Rename resource_ids to resource_attrs
+
 Version 0.10 2023-08-28
 - Move non-customisable code from pylapi_config_template.py to pylapi_gen.py
 - Add more customisations into pylapi_config_template.py

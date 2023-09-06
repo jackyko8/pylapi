@@ -1,34 +1,63 @@
 from __future__ import annotations
 import functools
-
+import sys
+import os
 import json
 import inspect
-
+import requests
+from enum import IntEnum
 from abc import ABC
 from typing import Any
 from copy import deepcopy
-from http import HTTPStatus
+import logging
+# from http import HTTPStatus
 
-from .util.attr_dict import *
-from .util.classproperty import *
-from .util.config import *
-from .util.error import *
-from .util.logger_util import *
-from .util.path_dict import *
+from .attr_dict import *
+from .path_dict import *
+
+sys.path.append(os.path.dirname(__file__))
+import config  # So that we can use the `config` namespace, e.g., config.<setting>
+
+logging.basicConfig()
+logger = logging.getLogger()
+logger.setLevel(config.log_level)
 
 
-# Convert path of int and slice types to str type to be used in dotted_dict
-# This is to handle data being a non-str.
-def _path_str(path):
-    dotted_path = path
-    if type(dotted_path) == int:
-        dotted_path = f"$[{dotted_path}]"
-    elif type(dotted_path) == slice:
-        start = dotted_path.start if dotted_path.start != None else ""
-        stop = dotted_path.stop if dotted_path.stop != None else ""
-        step = dotted_path.step if dotted_path.step != None else ""
-        dotted_path = f"$[{start}:{stop}:{step}]"
-    return dotted_path
+############################################################
+#
+# Literals
+#
+
+
+class HTTPMethod(IntEnum):
+    GET = 0
+    HEAD = 1
+    POST = 2
+    PUT = 3
+    DELETE = 4
+    OPTIONS = 5
+    PATCH = 6
+
+requests_http = [
+    requests.get,
+    requests.head,
+    requests.post,
+    requests.put,
+    requests.delete,
+    requests.options,
+    requests.patch,
+]
+
+# For logger.debug() use only
+requests_http_name = [
+    'GET',
+    'HEAD',
+    'POST',
+    'PUT',
+    'DELETE',
+    'OPTIONS',
+    'PATCH',
+]
 
 
 class PyLapiError(Exception):
@@ -39,7 +68,7 @@ class PyLapiError(Exception):
 
 
 class PyLapi(ABC):
-    # PyLapi class variables prefix: _pylapi_
+    # PyLapi class variables with prefix: _pylapi_
 
     # User configurables
     _pylapi_auth = ""
@@ -58,15 +87,14 @@ class PyLapi(ABC):
     _pylapi_callbacks = {}
 
     # Log
-    _pylapi_log_level = config_log_level
-    _pylapi_deep_log_level = config_deep_log_level
+    _pylapi_log_level = config.log_level
+    _pylapi_deep_log_level = config.deep_log_level
 
     def __init__(self, resource_data: dict = None, allow_api_raise=False) -> None:
         super().__init__()
         logger.debug(f"PyLapi.__init__(")
         logger.debug(f"    resource_data={resource_data},")
         logger.debug(f")")
-        # logger.debug(f"for class {self.__class__.__dict__}")
 
         # Error handling
         self._allow_api_raise = allow_api_raise
@@ -89,10 +117,13 @@ class PyLapi(ABC):
         return "/" + string if string else ""
 
 
-    def _rewrite_data(self, rewrite, data: dict=None):
+    def _rewrite_data(self, rewrite, data: dict=None) -> dict:
+        # `rewrite` is the "template" of what to return
+        # `data` is where path attributes "$" is sourced from
+        # `data` defaults to self._resource_data
         _data = data if data else self._resource_data
         if type(rewrite) == str:
-            # A path to data
+            # A path to data, e.g., $.data.owner.login
             return PathDict(_data)[rewrite]
 
         rewrite_str = json.dumps(rewrite)
@@ -138,7 +169,7 @@ class PyLapi(ABC):
             "headers": self._pylapi_base_headers,
         }
         # Append the auth header
-        request["headers"][config_default_api_auth_header_name] = \
+        request["headers"][config.default_api_auth_header_name] = \
             (self._pylapi_auth_type + " " if self._pylapi_auth_type else "") + \
             self._pylapi_auth
 
@@ -148,12 +179,15 @@ class PyLapi(ABC):
 
         # Json payload data
         logger.debug(f"_obtain_request_args: data={data}")
-        if data != None:
-            # Substitute with elements in self._resource_data
-            data = self._rewrite_data(data)
+        _data = data
+        if _data != None:
+            if type(_data) in (AttrDict, PathDict):
+                _data = _data.to_data()
+            # Substitute any "$" attributes found with self._resource_data ones
+            _data = self._rewrite_data(_data)
 
             request["headers"]["content-type"] = "application/json"
-            request["json"] = data  # if data != {} else self._resource_data
+            request["json"] = _data
             logger.debug(f"_obtain_request_args: request['json']={request['json']}")
 
         if headers != None:
@@ -164,6 +198,12 @@ class PyLapi(ABC):
 
 
     # Argument names `data` and `headers` are directly referenced in resource_method(). Do not rename them.
+    # Set these self variables
+    # self._request_http_method
+    # self._request
+    # Initialise these self variables
+    # self._response = None
+    # self._response_data = {}
     def _obtain_request_function(
             self,
             method_route: str,
@@ -181,10 +221,11 @@ class PyLapi(ABC):
         logger.debug(f"    query={query},")
         logger.debug(f")")
 
-        request_index = len(config_requests_http)  # Out of range unless set
+        request_index = len(requests_http)  # Would raise an IndexError unless set
+        _data = data
         _http_method = http_method
         if not _http_method:
-            _http_method = HTTPMethod.GET if data == None else HTTPMethod.POST
+            _http_method = HTTPMethod.GET if _data == None else HTTPMethod.POST
             request_index = int(_http_method)
             logger.debug(f"HTTPMethod auto assigned: {request_index}")
         elif type(_http_method) == str:
@@ -199,14 +240,14 @@ class PyLapi(ABC):
             logger.debug(f"HTTPMethod native: {request_index}")
 
         try:
-            request_func = config_requests_http[request_index]
+            request_func = requests_http[request_index]
         except:
             raise Exception(f"HTTPMethod {http_method} cannot be determined")
 
-        self._request_http_method = config_requests_http_name[request_index]
+        self._request_http_method = requests_http_name[request_index]
         logger.debug(f"Request Method to Use: {self._request_http_method}")
 
-        self._request = self._obtain_request_args(method_route, data=data, headers=headers, query=query)
+        self._request = self._obtain_request_args(method_route, data=_data, headers=headers, query=query)
 
         # Now that _request_http_method and _request are set,
         # need to nullify _response and _response_data
@@ -227,7 +268,9 @@ class PyLapi(ABC):
         auth: str = "",
         url: str = "",
     ) -> None:
-        cls._pylapi_auth = auth
+        # logger.debug(f"auth")
+        if auth:
+            cls._pylapi_auth = auth
         if url:
             cls._pylapi_url = url
 
@@ -237,10 +280,14 @@ class PyLapi(ABC):
         _val = val
         if _val != None:
             if cls._pylapi_auth:
+                # No effect unless val is str, dict or list
                 if type(val) in (dict, list):
                     _val = json.dumps(_val)
-                _val = _val.replace(cls._pylapi_auth, "<api_auth>")
+                # _val should be a str
+                if type(_val) == str:  # Instead of val, check _val in case json failed
+                    _val = _val.replace(cls._pylapi_auth, "<api_auth>")
                 if type(val) in (dict, list):
+                    # Convert back to original type
                     _val = json.loads(_val)
             else:
                 if type(val) == dict:
@@ -262,7 +309,7 @@ class PyLapi(ABC):
 
 
     @classmethod
-    def resource(cls, resource_name: str, data: dict=None, **kwargs) -> PyLapi:
+    def resource(cls, resource_name: str="", data: dict=None, **kwargs) -> PyLapi:
         # logger.debug(f"resource: resource_name={resource_name}, data={data}, kwargs={kwargs}")
         _data = data if data != None else kwargs
         return cls._resource_class(resource_name)(resource_data=_data)
@@ -275,7 +322,7 @@ class PyLapi(ABC):
 
     def __getitem__(self, path) -> Any:
         # logger.debug(f"__getitem__: {path}")
-        item = PathDict(self._resource_data)[_path_str(path)]
+        item = PathDict(self._resource_data)[path]
         if type(item) == dict:
             item = deepcopy(item)
         return item
@@ -291,28 +338,26 @@ class PyLapi(ABC):
         if path == "" or path == "$" or path == "$.":
             self._resource_data = _value
         else:
-            PathDict(self._resource_data)[_path_str(path)] = _value
+            PathDict(self._resource_data)[path] = _value
 
 
     def __delitem__(self, path) -> None:
         # logger.debug(f"__delitem__: {type(path)} {path}")
-        del PathDict(self._resource_data)[_path_str(path)]
+        del PathDict(self._resource_data)[path]
 
 
-    # def __getattr__(self, attr) -> Any:
-    #     logger.debug(f"__getattr__: {type(attr)} {attr}")
-    #     item = self[attr] if attr != "data" else self._resource_data
-    #     return item
-
+    ############################################################
+    #
+    # Attribute variable addressing (dotted for resource attribute mapping)
+    #
 
     def __getattr__(self, attr: str) -> Any:
         # logger.debug(f"__getattr__: {attr}")
-        # logger.debug(f"self._resource_ids: {self._resource_ids}")
-        if attr in self._resource_ids:
-            value = self[self._resource_ids[attr]]
+        # logger.debug(f"self._resource_attrs: {self._resource_attrs}")
+        if attr in self._resource_attrs:
+            value = self[self._resource_attrs[attr]]
             # logger.debug(f"return ID value: {value}")
         else:
-            # value = getattr(self, attr)
             # logger.debug(f"{super()}")
             if hasattr(super(), attr):
                 value = super().__getattr__(attr)
@@ -323,8 +368,8 @@ class PyLapi(ABC):
 
     def __setattr__(self, attr: str, value: Any) -> None:
         # logger.debug(f"__setattr__: {attr} to <value>")
-        if attr in self._resource_ids:
-            self[self._resource_ids[attr]] = value
+        if attr in self._resource_attrs:
+            self[self._resource_attrs[attr]] = value
         elif attr == "data":
             self[""] = value
         else:
@@ -334,8 +379,8 @@ class PyLapi(ABC):
 
     def __delattr__(self, attr: str) -> None:
         # logger.debug(f"__delattr__: {attr}")
-        if attr in self._resource_ids:
-            del self[attr]
+        if attr in self._resource_attrs:
+            del self[self._resource_attrs[attr]]
         else:
             # del self.__dict__[attr]
             super().__delattr__(attr)
@@ -343,11 +388,11 @@ class PyLapi(ABC):
 
     ############################################################
     #
-    # Class operations
+    # Class magic operations
     #
 
     def __str__(self) -> str:
-        return json.dumps(self._resource_data, indent=config_pylapi_json_indent)
+        return json.dumps(self._resource_data, indent=config.pylapi_json_indent)
 
 
     def __repr__(self) -> str:
@@ -381,9 +426,29 @@ class PyLapi(ABC):
 
 
     @property
+    def resource_attrs(self) -> dict:
+        # logger.debug(f"get resource_attrs: {self._resource_attrs}")
+        return self._resource_attrs
+
+    @resource_attrs.setter
+    def resource_attrs(self, _resource_attrs: dict):
+        # logger.debug(f"set resource_attrs: {self._resource_attrs} <- {_resource_attrs}")
+        if type(_resource_attrs) == dict:
+            self._resource_attrs = _resource_attrs
+        else:
+            raise ValueError(f"Invalid resource_attrs: {_resource_attrs}")
+
+
+    ############################################################
+    #
+    # Object property getters (with no setters)
+    #
+
+    @property
     def resource_name(self) -> str:
         # logger.debug(f"get resource_name: {self._resource_name}")
         return self._resource_name
+    # setter not allowed
 
 
     @property
@@ -392,12 +457,14 @@ class PyLapi(ABC):
         return self.wash_secrets(self._request)
 
 
+    # For use by callbacks with pass-by-reference
     @property
     def raw_request(self):
         # logger.debug(f"get request: {type(self._request)})")
         return self._request
 
 
+    # Should get raw_request to update instead of a setter
     # @request.setter
     # def request(self, request: dict):
     #     logger.debug(f"set request: {self._request} <- {request}")
@@ -428,21 +495,43 @@ class PyLapi(ABC):
     @property
     def data(self) -> dict:
         return AttrDict(self._resource_data)
+    # setting handled by __setattr__
+
+
+    ############################################################
+    #
+    # Class property getters and setters
+    #
+
+    # @classproperty
+    @property
+    def api_auth(cls) -> str:
+        # logger.debug(f"get api_auth")
+        return cls.wash_secrets(cls._pylapi_auth)
+
+    @api_auth.setter
+    def api_auth(cls, _api_auth: str):
+        # logger.debug(f"set api_auth")
+        if type(_api_auth) == str:
+            # cls._pylapi_auth = _api_auth
+            cls.auth(_api_auth)
+        else:
+            raise ValueError(f"Invalid api_auth")
 
 
     # @classproperty
     @property
-    def resource_ids(self) -> dict:
-        # logger.debug(f"get resource_ids: {self._resource_ids}")
-        return self._resource_ids
+    def api_url(cls) -> str:
+        # logger.debug(f"get api_url: {cls._pylapi_url}")
+        return cls._pylapi_url
 
-    @resource_ids.setter
-    def resource_ids(self, _resource_ids: dict):
-        # logger.debug(f"set resource_ids: {self._resource_ids} <- {_resource_ids}")
-        if type(_resource_ids) == dict:
-            self._resource_ids = _resource_ids
+    @api_url.setter
+    def api_url(cls, _api_url: str):
+        # logger.debug(f"set api_url: {cls._pylapi_url} -> {_api_url}")
+        if type(_api_url) == str and _api_url:
+            cls._pylapi_url = _api_url
         else:
-            raise ValueError(f"Invalid resource_ids: {_resource_ids}")
+            raise ValueError(f"Invalid api_url: {_api_url}")
 
 
     # @classproperty
@@ -459,41 +548,8 @@ class PyLapi(ABC):
             raise ValueError(f"Invalid api_base_headers: {_api_base_headers}")
 
 
-    ############################################################
-    #
-    # Class property getters, setters, and deleters
-    #
-
     # @classproperty
-    # def api_auth(cls) -> str:
-    #     # logger.debug(f"get api_auth")
-    #     return cls.wash_secrets(cls._pylapi_auth)
-
-    # @api_auth.setter
-    # def api_auth(cls, _api_auth: str):
-    #     logger.debug(f"set api_auth")
-    #     if type(_api_auth) == str:
-    #         # cls._pylapi_auth = _api_auth
-    #         cls.auth(_api_auth)
-    #     else:
-    #         raise ValueError(f"Invalid api_auth")
-
-
-    @classproperty
-    def api_url(cls) -> str:
-        # logger.debug(f"get api_url: {cls._pylapi_url}")
-        return cls._pylapi_url
-
-    @api_url.setter
-    def api_url(cls, _api_url: str):
-        # logger.debug(f"set api_url: {cls._pylapi_url} -> {_api_url}")
-        if type(_api_url) == str and _api_url:
-            cls._pylapi_url = _api_url
-        else:
-            raise ValueError(f"Invalid api_url: {_api_url}")
-
-
-    @classproperty
+    @property
     def api_auth_header_name(cls) -> str:
         return cls._pylapi_auth_header_name
 
@@ -505,7 +561,8 @@ class PyLapi(ABC):
             raise ValueError(f"Invalid api_auth_header_name: {_api_auth_header_name}")
 
 
-    @classproperty
+    # @classproperty
+    @property
     def api_auth_type(cls) -> str:
         return cls._pylapi_auth_type
 
@@ -562,6 +619,22 @@ class PyLapi(ABC):
         # return _ok
 
 
+    # Recursively remove all attributes of the specified name
+    def del_attr(self, attr_name: str, data=None):
+        _data = data
+        if _data == None:
+            # This block is executed only in the client call.
+            # self._resource_data will not be changed.
+            _data = self._resource_data
+        if type(_data) == dict:
+            return {_: self.del_attr(attr_name, _data[_]) for _ in _data if _ != attr_name}
+        elif type(_data) == list:
+            # Need to go deep
+            return [self.del_attr(attr_name, _) for _ in _data]
+        else:
+            return _data
+
+
     ############################################################
     #
     # Decorators for subclasses
@@ -586,16 +659,15 @@ class PyLapi(ABC):
             logger.debug(f"_pylapi_routes={cls._pylapi_resource_base_routes}")
 
             # Defaults
-            cls._pylapi_url = config_default_api_url
-            cls._pylapi_auth_header_name = config_default_api_auth_header_name
-            cls._pylapi_auth_type = config_default_api_auth_type
-            cls._pylapi_base_headers = config_default_api_base_headers
+            cls._pylapi_auth_header_name = config.default_api_auth_header_name
+            cls._pylapi_auth_type = config.default_api_auth_type
+            cls._pylapi_base_headers = config.default_api_base_headers
 
             # Register with itself
             resource_cls._resource_name = resource_name
             logger.debug(f"resource_cls._resource_name={resource_cls._resource_name}")
-            resource_cls._resource_ids = kwargs
-            logger.debug(f"_resource_ids={resource_cls._resource_ids}")
+            resource_cls._resource_attrs = kwargs
+            logger.debug(f"_resource_attrs={resource_cls._resource_attrs}")
 
             @functools.wraps(resource_cls)
             def init_wrapper(*args, **kwargs):
@@ -653,7 +725,7 @@ class PyLapi(ABC):
                 # Internal variables
                 _kwargs = kwargs.copy()
                 logger.debug(f"_kwargs={_kwargs} (initially)")
-                _res_ids = self._resource_ids.copy()
+                _res_ids = self._resource_attrs.copy()
                 logger.debug(f"_res_ids={_res_ids} (initially)")
 
                 arg_values = {}
@@ -765,7 +837,7 @@ class PyLapi(ABC):
                         logger.debug(f"{route_var_name} <- _arg_values[{route_var_name}]={_arg_values[route_var_name]}")
                     elif route_var_name in _res_ids:
                         # Implicitly specified in ID attributes
-                        # logger.debug(f"{route_var_name} is in self._resource_ids: {self._resource_ids}")
+                        # logger.debug(f"{route_var_name} is in self._resource_attrs: {self._resource_attrs}")
                         route_value = self[_res_ids[route_var_name]]
                         logger.debug(f"{route_var_name} <- _res_ids[{route_var_name}]={_res_ids[route_var_name]}->{self[_res_ids[route_var_name]]}")
                         _arg_values[route_var_name] = route_value  # Add for callback
@@ -814,8 +886,6 @@ class PyLapi(ABC):
                     logger.debug(f"Before: {self._request['json']}")
                     self._request["json"] = self._rewrite_data(send, self._request["json"])
                     logger.debug(f"After:  {self._request['json']}")
-
-                # cb_arg_values = arg_values.update(kwargs)  # kwargs takes precedence
 
                 logger.debug(f"Check request callback {method.__qualname__}.request")
                 logger.debug(f"cls._pylapi_callbacks={cls._pylapi_callbacks}")

@@ -1,19 +1,37 @@
-# PyLapiSDK Generator Configuration
+# PyLapi API Generator Configuration
 
-# The OpenAPI specifiation file in JSON
+# The OpenAPI specification (OAS) file in JSON or YAML
+# A relative path, if specified, is relative to this config file.
+# Default: <this_config_file>.json
 oas_file_name = "./example_oas.json"
-output_py_name = "./example.py"
 
-# The authentication type prepended to the access credential
-api_auth_type = "Bearer"
+# The output of the generated API
+# Overwritable by CLI --output=
+# Default: stdout
+output_py_name = "./my_api.py"
+
+# The PyLapi API class name (the common parent of all Resource classes)
+# Default: <oas>.info.title
+api_class_name = "MyAPI"
+
+# The authentication type prepended to the "Authentication" header
+# Default: Bearer
+# api_auth_type = "Bearer"
 
 # The API Server URL
-# Default oas.server[0].url
+# Default: <oas>.server[0].url
 # api_url = "https://api.example.com"
 
-# The PyLapi API class name (the comment parent of all Resource classes)
-# Default oas.info.title
-api_class_name = "PyLapiSDK"
+# OpenAPI guide of resource methods
+# Default: no guide; overwritable from CLI --guide=
+guide_attrs = {
+    "summary",
+    "description",
+    # "parameters",
+    # "request_body",
+    # "ref",
+}
+# Note: Including "ref" will dereference all $ref OAS attributes and generates very lengthy guide.
 
 # Naming of resource classes, names, paths, and methods
 # Available magic words conversions:
@@ -22,6 +40,7 @@ api_class_name = "PyLapiSDK"
 #   pascal (upperCamel)
 #   camel (lowerCamel)
 #   singular
+# Required - Modify as needed but DO NOT delete or comment out
 naming = {
     # Resource Class Name:
     # class ExampleResource(...):
@@ -50,26 +69,9 @@ naming = {
     "method_name": "lowerCamel($.operation_id)",
 }
 
-# Optional Python statements appended to the standard API class __init__()
-# Please start the statements on the left without extra indentation.
-# api_class_init = """
-# """
+# Optional Code Rewrite script with classes and methods replacing the generated ones
+# Default: no code rewrite
+# code_rewrite_file_name = "./my_api_rewrite.py"
 
-# Optional methods in the API class (to be inherited by all resource classes)
-# Please start the statements on the left without extra indentation.
-# api_methods = """
-# """
-
-# Optional guide of OpenAPI method specifications; can be overwritten from CLI
-# Please comment out unwanted ones
-guide_attrs = {
-    "summary",
-    "description",
-    "parameters",
-    "request_body",
-    # "ref",
-}
-
-# Optional resource_method decorator arguments (applied to all resource methods in the SDK)
-# For example, {"send": {"data": "$"}, "give": "$.data"}
-# resource_method_args = {}
+# Optional resource_method decorator arguments (applied to all resource methods)
+# resource_method_args = {"send": {"data": "$"}, "give": "$.data"}

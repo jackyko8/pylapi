@@ -5,10 +5,10 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="pylapi",
-    version="0.3",
+    version="0.11",
     author="Jacky Ko",
     author_email="",
-    description="Generic API SDK Python",
+    description="PyLapi - Python Lightweight API",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/jackyko8/pylapi",
