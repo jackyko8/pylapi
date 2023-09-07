@@ -354,6 +354,8 @@ class PyLapi(ABC):
     def __getattr__(self, attr: str) -> Any:
         # logger.debug(f"__getattr__: {attr}")
         # logger.debug(f"self._resource_attrs: {self._resource_attrs}")
+        if "_resource_attrs" not in dir(self):
+            raise Exception(f"Only subclasses of {self.__class__.__name__} decorated by @{self.__class__.__name__}.resource_class can be instantiated")
         if attr in self._resource_attrs:
             value = self[self._resource_attrs[attr]]
             # logger.debug(f"return ID value: {value}")
@@ -368,6 +370,8 @@ class PyLapi(ABC):
 
     def __setattr__(self, attr: str, value: Any) -> None:
         # logger.debug(f"__setattr__: {attr} to <value>")
+        if "_resource_attrs" not in dir(self):
+            raise Exception(f"Only subclasses of {self.__class__.__name__} decorated by @{self.__class__.__name__}.resource_class can be instantiated")
         if attr in self._resource_attrs:
             self[self._resource_attrs[attr]] = value
         elif attr == "data":
@@ -379,6 +383,8 @@ class PyLapi(ABC):
 
     def __delattr__(self, attr: str) -> None:
         # logger.debug(f"__delattr__: {attr}")
+        if "_resource_attrs" not in dir(self):
+            raise Exception(f"Only subclasses of {self.__class__.__name__} decorated by @{self.__class__.__name__}.resource_class can be instantiated")
         if attr in self._resource_attrs:
             del self[self._resource_attrs[attr]]
         else:
@@ -714,7 +720,7 @@ class PyLapi(ABC):
                 #     - Use kwargs if found, then remove
                 #     - Use res_ids if found, but don't remove
                 #     - Use None (as a place holder)
-                # - Remove both implicitly and explicitly defined _res_ids
+                # - Remove both implicitly and explicitly defined _res_attrs
                 # - More args than in arg_names
                 #   - For each additional arg, use res_ids in order
                 #     - If res_ids run out, the remaining args will be ignored
@@ -725,8 +731,20 @@ class PyLapi(ABC):
                 # Internal variables
                 _kwargs = kwargs.copy()
                 logger.debug(f"_kwargs={_kwargs} (initially)")
-                _res_ids = self._resource_attrs.copy()
-                logger.debug(f"_res_ids={_res_ids} (initially)")
+
+                _method_route = method_route
+                # API route variable names - those found in the api route
+                route_var_names = re.findall(r"{([a-zA-Z_-]([0-9a-zA-Z_-])*)}", _method_route)
+                route_var_names = [_[0] for _ in route_var_names]
+                logger.debug(f"route_var_names={route_var_names}")
+
+                _res_attrs = self._resource_attrs.copy()
+                logger.debug(f"_res_attrs={_res_attrs} (initially)")
+
+                if len(_res_attrs) == 0 and len(route_var_names) > 0:
+                    # Auto resource attributes
+                    _res_attrs = {_: "$." + _ for _ in route_var_names}
+                    logger.debug(f"_res_attrs={_res_attrs} (auto based on route_var_names={route_var_names})")
 
                 arg_values = {}
                 arg_names = method_inspected.args
@@ -770,10 +788,10 @@ class PyLapi(ABC):
                             logger.debug(f"  but in _kwargs[{arg_name}]={_kwargs[arg_name]}")
                             _arg_values[arg_name] = _kwargs[arg_name]
                             del _kwargs[arg_name]  # To remove from query
-                        elif arg_name in _res_ids:
-                            # Use _res_ids, but don't remove (leave later)
-                            logger.debug(f"  but in _res_ids[{arg_name}]={_res_ids[arg_name]}->{self[_res_ids[arg_name]]}")
-                            _arg_values[arg_name] = self[_res_ids[arg_name]]
+                        elif arg_name in _res_attrs:
+                            # Use _res_attrs, but don't remove (leave later)
+                            logger.debug(f"  but in _res_attrs[{arg_name}]={_res_attrs[arg_name]}->{self[_res_attrs[arg_name]]}")
+                            _arg_values[arg_name] = self[_res_attrs[arg_name]]
                         else:
                             # Use None
                             logger.debug(f"  and None found")
@@ -781,26 +799,26 @@ class PyLapi(ABC):
                 logger.debug(f"_arg_values={_arg_values} (in the order in call)")
                 logger.debug(f"_kwargs={_kwargs} (after filling missing)")
 
-                # Remove both implicitly and explicitly defined _res_ids
-                logger.debug("--- Remove both implicitly and explicitly defined _res_ids")
+                # Remove both implicitly and explicitly defined _res_attrs
+                logger.debug("--- Remove both implicitly and explicitly defined _res_attrs")
                 for arg_name in _arg_values:
-                    if arg_name in _res_ids:
-                        del _res_ids[arg_name]
-                logger.debug(f"_res_ids={_res_ids} (after in-arg_values trimmed)")
+                    if arg_name in _res_attrs:
+                        del _res_attrs[arg_name]
+                logger.debug(f"_res_attrs={_res_attrs} (after in-arg_values trimmed)")
 
-                # For excessive args, fill with remaining _res_ids
-                _res_ids_names = list(_res_ids.keys())
+                # For excessive args, fill with remaining _res_attrs
+                _res_attrs_names = list(_res_attrs.keys())
                 if len(arg_names) < len(args):
                     # Not to use arg_names except as a marker
                     logger.debug(f"There are {len(args) - len(arg_names)} more positional arguments in call than in def")
-                    logger.debug(f"Going to assign to the {len(_res_ids_names)} remain resource IDs: {_res_ids_names}")
-                    for ii in range(len(arg_names), min(len(args), len(arg_names) + len(_res_ids_names))):
-                        _res_ids_name = _res_ids_names[ii - len(arg_names)]  # The above range guarantee existance
-                        _arg_values[_res_ids_name] = args[ii]
-                        logger.debug(f"_arg_values[{_res_ids_name}] <- {args[ii]}")
-                        del _res_ids[_res_ids_name]
+                    logger.debug(f"Going to assign to the {len(_res_attrs_names)} remain resource IDs: {_res_attrs_names}")
+                    for ii in range(len(arg_names), min(len(args), len(arg_names) + len(_res_attrs_names))):
+                        _res_attrs_name = _res_attrs_names[ii - len(arg_names)]  # The above range guarantee existance
+                        _arg_values[_res_attrs_name] = args[ii]
+                        logger.debug(f"_arg_values[{_res_attrs_name}] <- {args[ii]}")
+                        del _res_attrs[_res_attrs_name]
                     logger.debug(f"arg_values={_arg_values} (extended with resource IDs)")
-                    logger.debug(f"_res_ids={_res_ids} (after excessive args trimmed)")
+                    logger.debug(f"_res_attrs={_res_attrs} (after excessive args trimmed)")
 
                 # _kwargs have final say - override _arg_values if still found, then remove
                 _kwargs_names = list(_kwargs.keys())
@@ -812,14 +830,8 @@ class PyLapi(ABC):
 
                 ##########
                 #
-                # Determine _method_route
+                # Route variables
                 #
-                _method_route = method_route
-                # API route variable names - those found in the api route
-                route_var_names = re.findall(r"{([a-zA-Z_-]([0-9a-zA-Z_-])*)}", _method_route)
-                route_var_names = [_[0] for _ in route_var_names]
-                logger.debug(f"route_var_names={route_var_names}")
-
                 logger.debug(f"Finding route variables: {route_var_names}")
                 for route_var_name in route_var_names:
                     route_value = None
@@ -835,11 +847,11 @@ class PyLapi(ABC):
                         # Explicitly specified in method args (positional)
                         route_value = _arg_values[route_var_name]
                         logger.debug(f"{route_var_name} <- _arg_values[{route_var_name}]={_arg_values[route_var_name]}")
-                    elif route_var_name in _res_ids:
+                    elif route_var_name in _res_attrs:
                         # Implicitly specified in ID attributes
-                        # logger.debug(f"{route_var_name} is in self._resource_attrs: {self._resource_attrs}")
-                        route_value = self[_res_ids[route_var_name]]
-                        logger.debug(f"{route_var_name} <- _res_ids[{route_var_name}]={_res_ids[route_var_name]}->{self[_res_ids[route_var_name]]}")
+                        # logger.debug(f"{route_var_name} is in _res_attrs: {_res_attrs}")
+                        route_value = self[_res_attrs[route_var_name]]
+                        logger.debug(f"{route_var_name} <- _res_attrs[{route_var_name}]={_res_attrs[route_var_name]}->{self[_res_attrs[route_var_name]]}")
                         _arg_values[route_var_name] = route_value  # Add for callback
 
                     # logger.debug(f"route_value={route_value}")

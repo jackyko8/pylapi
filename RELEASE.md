@@ -1,5 +1,12 @@
 # Release Notes
 
+Version 0.12 2023-09-07
+- Add auto resource attrs mapping based on method route
+- Upload to PyPI test
+- Update src/README.md
+- Add PyLapi and root API class direct instantiation test
+- Add upper camel case to oas.info.title as default api_class_name
+
 Version 0.11 2023-09-06
 - Code Rewrite in pylapi_gen
 - Add more parameters guides

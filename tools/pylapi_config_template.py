@@ -3,15 +3,15 @@
 # The OpenAPI specification (OAS) file in JSON or YAML
 # A relative path, if specified, is relative to this config file.
 # Default: <this_config_file>.json
-oas_file_name = "./example_oas.json"
+oas_file_name = "./myapi_oas.json"
 
 # The output of the generated API
 # Overwritable by CLI --output=
 # Default: stdout
-output_py_name = "./my_api.py"
+output_py_name = "./myapi.py"
 
 # The PyLapi API class name (the common parent of all Resource classes)
-# Default: <oas>.info.title
+# Default: <oas>.info.title in Pascal (upperCamel) case
 api_class_name = "MyAPI"
 
 # The authentication type prepended to the "Authentication" header
@@ -71,7 +71,7 @@ naming = {
 
 # Optional Code Rewrite script with classes and methods replacing the generated ones
 # Default: no code rewrite
-# code_rewrite_file_name = "./my_api_rewrite.py"
+# code_rewrite_file_name = "./myapi_rewrite.py"
 
 # Optional resource_method decorator arguments (applied to all resource methods)
 # resource_method_args = {"send": {"data": "$"}, "give": "$.data"}

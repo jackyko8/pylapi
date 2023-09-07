@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="pylapi",
-    version="0.11",
+    version="0.12",
     author="Jacky Ko",
     author_email="",
     description="PyLapi - Python Lightweight API",

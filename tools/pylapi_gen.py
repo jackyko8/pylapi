@@ -216,7 +216,7 @@ def set_config(config, _oas_spec):
         _ = config.api_class_name  # A trivial check
     except:
         try:
-            api_class_name = _oas_spec["info"]["title"]
+            api_class_name = upperCamel(_oas_spec["info"]["title"])
         except:
             raise Exception(f"API class name cannot be determined: Neither in config and nor in OpenAI specification")
         else:
@@ -466,7 +466,7 @@ def print_method(config, method, resource_method_args_str):
     print_line(f"    {co}def {method.method_name}(self): pass")
     print_line(code_lines)
     print_line(f"    # To call: {config.api_class_name}.resource(\"{method.resource_name}\").{method.method_name}(...)")
-    print_line(f"    # {method.http_method} {config.api_url}{method.api_path}")
+    print_line(f"    # Request: {method.http_method} {config.api_url}{method.api_path}")
     print_line()
 
 
@@ -719,7 +719,8 @@ def main():
     gen_resource_classes(config, methods, classes)
 
     if output_py_name:
-        print(f"{config.api_class_name} generated and saved in {output_py_name}")
+        code_rewrite_text = f", merged with {code_rewrite_file_name}," if code_rewrite_file_name else ""
+        print(f"{config.api_class_name} generated{code_rewrite_text} and saved in {output_py_name}")
 
 if __name__ == "__main__":
     main()
