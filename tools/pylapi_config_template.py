@@ -45,23 +45,23 @@ naming = {
     # Resource Class Name:
     # class ExampleResource(...):
     # Example: UpperCamel case plus "Resource" for class names
-    "class_name": "upperCamel($.path_items[0]) + 'Resource'",
+    "class_name": "upperCamel($.path_segments[0]) + 'Resource'",
 
     # Resource Name used to create a resource object:
     # my_resource = MyAPI.resource("example_resource")
     # Example: Snake case for resource names
-    "resource_name": "snake($.path_items[0])",
+    "resource_name": "snake($.path_segments[0])",
 
     # API path prefix for all methods in the class
     # API full path is {class_path}/{resource_path}
     # Example: resources as in /resources/api_method/...
     # IMPORTANT: Make sure the class_path is common to all methods in the class.
-    "class_path": "$.path_items[0]",
+    "class_path": "$.path_segments[0]",
 
     # API path suffix for the method
     # API full path is {class_path}/{resource_path}
     # Example: api_method as in /resources/api_method/...
-    "resource_path": "'/'.join($.path_items[1:])",
+    "resource_path": "'/'.join($.path_segments[1:])",
 
     # Method Name
     # def exampleMethod(self):

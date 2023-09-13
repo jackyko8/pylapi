@@ -1,5 +1,12 @@
 # Release Notes
 
+Version 0.12.2 2023-09-13
+- Add README.md
+- Rename path_items to path_segments
+- pylapi_gen checks over-consolidation in class name (invalid_classes)
+- Move OAS, config, and rewrite files to tutorial (instead of soft linking)
+- More toturials
+
 Version 0.12 2023-09-07
 - Add auto resource attrs mapping based on method route
 - Upload to PyPI test
