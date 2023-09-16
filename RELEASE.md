@@ -1,5 +1,24 @@
 # Release Notes
 
+Version 0.12.3 2023-09-16
+- General
+  - Rename "route" to "path"
+- pylapi
+  - Add .resource_data property
+  - Add .raw_response property
+- pylapi_gen
+  - Check class name overlaps (resource consolidation)
+  - Enhance error for giving the wrong config.py file in pylapi_gen
+  - Enhance resource_method guide with keyword arguments from API path
+  - Fix left-over classes in pylapi_gen
+  - Add resource_class_args configuration
+- PathDict
+  - Add dict and list methods to PathDict to be in line with AttrDict
+  - Fix PathDict bool assignment issue
+    - fail when _value = False
+    - use _value != None instead
+- More tutorials
+
 Version 0.12.2 2023-09-13
 - Add README.md
 - Rename path_items to path_segments

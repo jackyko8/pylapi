@@ -1,8 +1,8 @@
 # aAPI (Asana API) PyLapi Generator Configuration
 
 api_class_name = "aAPI"
-oas_file_name = "./asana_oas.json"
 output_py_name = "./aapi.py"
+oas_file_name = "./asana_oas.json"
 
 guide_attrs = {
     "summary",
@@ -20,6 +20,8 @@ naming = {
     "method_name": "lowerCamel($.operation_id)",
 }
 
-code_rewrite_file_name = "./aapi_rewrite.py"
+resource_class_args = {"gid": "$.gid"}
 
 resource_method_args = {"send": {"data": "$"}, "give": "$.data"}
+
+code_rewrite_file_name = "./aapi_rewrite.py"

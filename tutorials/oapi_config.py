@@ -1,8 +1,8 @@
 # oAPI (OpenAI API) PyLapi Generator Configuration
 
 api_class_name = "oAPI"
-oas_file_name = "./openapi.yaml"
 output_py_name = "./oapi.py"
+oas_file_name = "./openapi.yaml"
 
 guide_attrs = {
     "summary",
@@ -20,4 +20,4 @@ naming = {
     "method_name": "lowerCamel($.operation_id)",
 }
 
-# code_rewrite_file_name = "./oapi_rewrite.py"
+code_rewrite_file_name = "./oapi_rewrite.py"

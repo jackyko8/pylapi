@@ -81,7 +81,7 @@ class PyLapi(ABC):
 
     # API Classes and Routes
     _pylapi_resource_classes = {}
-    _pylapi_resource_base_routes = {}
+    _pylapi_resource_base_paths = {}
 
     # Callbacks
     _pylapi_callbacks = {}
@@ -144,26 +144,26 @@ class PyLapi(ABC):
 
     def _obtain_request_args(
             self,
-            method_route: str = "",
+            method_path: str = "",
             data: dict = None,
             headers: dict = None,
             query: dict = None,
         ) -> dict:
 
         # _obtain_request_args(): GET resource route (with no query params)
-        # _obtain_request_args(method_route): GET resource_base_route/method_route
-        # _obtain_request_args(method_route,query=...): GET resource_base_route/method_route with query
-        # _obtain_request_args(method_route,data=...,[query=...]): POST with data, with or without query
-        # _obtain_request_args(method_route,data={},[query=...]): POST with data, with or without query
+        # _obtain_request_args(method_path): GET resource_base_path/method_path
+        # _obtain_request_args(method_path,query=...): GET resource_base_path/method_path with query
+        # _obtain_request_args(method_path,data=...,[query=...]): POST with data, with or without query
+        # _obtain_request_args(method_path,data={},[query=...]): POST with data, with or without query
 
         # GET/POST above is indicative. The caller will determine if they get or post the request.
 
         # logger.debug(f"self._pylapi_url={self._pylapi_url}")
-        # logger.debug(f"self._pylapi_resource_base_routes={self._pylapi_resource_base_routes}")
+        # logger.debug(f"self._pylapi_resource_base_paths={self._pylapi_resource_base_paths}")
         # logger.debug(f"self._resource_name={self._resource_name}")
         # logger.debug(f"self._pylapi_base_headers={self.wash_secrets(self._pylapi_base_headers)}")
-        logger.debug(f"_obtain_request_args: method_route={method_route}")
-        api_url = f"{self._pylapi_url}{self._slash(self._pylapi_resource_base_routes[self._resource_name])}{self._slash(method_route)}"
+        logger.debug(f"_obtain_request_args: method_path={method_path}")
+        api_url = f"{self._pylapi_url}{self._slash(self._pylapi_resource_base_paths[self._resource_name])}{self._slash(method_path)}"
         request = {
             "url": api_url,
             "headers": self._pylapi_base_headers,
@@ -206,7 +206,7 @@ class PyLapi(ABC):
     # self._response_data = {}
     def _obtain_request_function(
             self,
-            method_route: str,
+            method_path: str,
             http_method: Any = None,
             data: dict = None,
             headers: dict = None,
@@ -214,7 +214,7 @@ class PyLapi(ABC):
         ) -> function:
 
         logger.debug(f"_obtain_request_function(")
-        logger.debug(f"    method_route={method_route},")
+        logger.debug(f"    method_path={method_path},")
         logger.debug(f"    http_method={http_method},")
         logger.debug(f"    data={data},")
         logger.debug(f"    headers={self.wash_secrets(headers)},")
@@ -247,7 +247,7 @@ class PyLapi(ABC):
         self._request_http_method = requests_http_name[request_index]
         logger.debug(f"Request Method to Use: {self._request_http_method}")
 
-        self._request = self._obtain_request_args(method_route, data=_data, headers=headers, query=query)
+        self._request = self._obtain_request_args(method_path, data=_data, headers=headers, query=query)
 
         # Now that _request_http_method and _request are set,
         # need to nullify _response and _response_data
@@ -333,7 +333,7 @@ class PyLapi(ABC):
         _value = value
         if isinstance(_value, PyLapi):
             _value = _value["$"]
-        elif type(_value) not in (dict, str, int, float):
+        elif type(_value) not in (dict, str, int, float, bool):
             raise ValueError(f"Invalid {self._resource_name} attribute: {type(value)} {value}")
         if path == "" or path == "$" or path == "$.":
             self._resource_data = _value
@@ -454,7 +454,12 @@ class PyLapi(ABC):
     def resource_name(self) -> str:
         # logger.debug(f"get resource_name: {self._resource_name}")
         return self._resource_name
-    # setter not allowed
+
+
+    @property
+    def resource_data(self) -> str:
+        # logger.debug(f"get resource_data: {self._resource_data}")
+        return self._resource_data
 
 
     @property
@@ -490,6 +495,18 @@ class PyLapi(ABC):
     def response(self):
         # logger.debug(f"get response: {self._response}")
         return self._response
+
+
+    # For accessing API response attributes outside of response_data
+    @property
+    def raw_response(self):
+        # logger.debug(f"get request: {type(self._request)})")
+        resp = None
+        try:
+            resp = json.loads(self._response.text)
+        except:
+            resp = self._response.text
+        return resp
 
 
     @property
@@ -647,11 +664,11 @@ class PyLapi(ABC):
     #
 
     @classmethod
-    def resource_class(cls, resource_name, resource_base_route="", **kwargs):
+    def resource_class(cls, resource_name, resource_base_path="", **kwargs):
         logger.debug(f"resource_class(")
         logger.debug(f"    cls={cls},")
         logger.debug(f"    resource_name={resource_name},")
-        logger.debug(f"    resource_base_route={resource_base_route},")
+        logger.debug(f"    resource_base_path={resource_base_path},")
         logger.debug(f"    kwargs={kwargs}")
         logger.debug(f")")
         # @functools.wraps(cls)
@@ -661,8 +678,8 @@ class PyLapi(ABC):
             # Register with parent
             cls._pylapi_resource_classes[resource_name] = resource_cls
             logger.debug(f"_pylapi_classes={cls._pylapi_resource_classes}")
-            cls._pylapi_resource_base_routes[resource_name] = resource_base_route
-            logger.debug(f"_pylapi_routes={cls._pylapi_resource_base_routes}")
+            cls._pylapi_resource_base_paths[resource_name] = resource_base_path
+            logger.debug(f"_pylapi_routes={cls._pylapi_resource_base_paths}")
 
             # Defaults
             cls._pylapi_auth_header_name = config.default_api_auth_header_name
@@ -687,10 +704,10 @@ class PyLapi(ABC):
 
 
     @classmethod
-    def resource_method(cls, method_route: str="", http_method: Any=None, give="", load=None, send=None):
+    def resource_method(cls, method_path: str="", http_method: Any=None, give="", load=None, send=None):
         logger.debug(f"resource_method(")
         logger.debug(f"    cls={cls},")
-        logger.debug(f"    method=route={method_route},")
+        logger.debug(f"    method_path={method_path},")
         logger.debug(f"    http_method={http_method},")
         logger.debug(f"    give={give},")
         logger.debug(f"    load={load},")
@@ -732,9 +749,9 @@ class PyLapi(ABC):
                 _kwargs = kwargs.copy()
                 logger.debug(f"_kwargs={_kwargs} (initially)")
 
-                _method_route = method_route
+                _method_path = method_path
                 # API route variable names - those found in the api route
-                route_var_names = re.findall(r"{([a-zA-Z_-]([0-9a-zA-Z_-])*)}", _method_route)
+                route_var_names = re.findall(r"{([a-zA-Z_-]([0-9a-zA-Z_-])*)}", _method_path)
                 route_var_names = [_[0] for _ in route_var_names]
                 logger.debug(f"route_var_names={route_var_names}")
 
@@ -857,11 +874,11 @@ class PyLapi(ABC):
                     # logger.debug(f"route_value={route_value}")
                     if route_value != None:
                         logger.debug(f"Replace route variable {route_var_name} with {route_value}")
-                        _method_route = _method_route.replace("{" + route_var_name + "}", route_value)
+                        _method_path = _method_path.replace("{" + route_var_name + "}", route_value)
 
                 logger.debug(f"_kwargs={_kwargs} (after route_value trimmed)")
 
-                logger.debug(f"_method_route={_method_route}")
+                logger.debug(f"_method_path={_method_path}")
 
                 logger.debug(f"_arg_values.update(kwargs): _kwargs={_kwargs}")
                 _arg_values.update(_kwargs)
@@ -869,7 +886,7 @@ class PyLapi(ABC):
                 logger.debug(f"---------- {method.__qualname__}: arg_values={_arg_values}")
 
                 # Now _kwargs contains only unassigned kwargs
-                request_func = self._obtain_request_function(_method_route, http_method=http_method, **_arg_values)
+                request_func = self._obtain_request_function(_method_path, http_method=http_method, **_arg_values)
 
                 # To ensure `method()` is called only once upon its first use
                 # an entry in `cls._pylapi_callbacks` prevent `method()` is checked.
@@ -960,15 +977,15 @@ class PyLapi(ABC):
             return method_wrapper
 
         # Allow @resource_method instead of requiring @resource_method("")
-        if (type(method_route) == str):
-            # _method_route is in the argument
-            logger.debug(f"method_route arg explicitly specified: \"{method_route}\"")
+        if (type(method_path) == str):
+            # _method_path is in the argument
+            logger.debug(f"method_path arg explicitly specified: \"{method_path}\"")
             return method_deco
         else:
-            # method_route is not specified, and it's in fact the method now
-            logger.debug(f"method_route arg not specified, taken as {method_route}")
-            _method = method_route
-            method_route = ""  # Default to ""
+            # method_path is not specified, and it's in fact the method now
+            logger.debug(f"method_path arg not specified, taken as {method_path}")
+            _method = method_path
+            method_path = ""  # Default to ""
             return method_deco(_method)
 
 

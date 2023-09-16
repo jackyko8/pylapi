@@ -11,7 +11,7 @@ class AttrDict(ABC):
     def __init__(self, data) -> None:
         self._data = data
         data_type = type(self._data)
-        type_method_list = {}
+        type_method_list = []
         if data_type == dict:
             type_method_list = [
                 "clear",

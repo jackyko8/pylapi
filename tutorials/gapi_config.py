@@ -19,5 +19,3 @@ naming = {
     "resource_path": "'/'.join($.path_segments[1:])",
     "method_name": "lowerCamel($.operation_id)",
 }
-
-# code_rewrite_file_name = "./gapi_rewrite.py"

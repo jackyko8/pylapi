@@ -1,6 +1,9 @@
 from abc import ABC
 from typing import Any
 import json
+import re
+from copy import deepcopy
+
 # import logging
 
 # logging.basicConfig()
@@ -74,9 +77,6 @@ def path_str(path):
 #           - Elif update, do so
 #           - return the old value
 
-import re
-from copy import deepcopy
-
 
 def dotted_dict(
         root_dict,
@@ -133,7 +133,7 @@ def dotted_dict(
                         # logger.debug(f"Error: Cannot delete {key}")
                         # return None
                         raise KeyError(f"Cannot delete {key}")
-                    elif _value:
+                    elif _value != None:
                         # logger.debug(f"Error: Cannot set value for {key}")
                         # return old_value
                         raise KeyError(f"Cannot set value for {key}")
@@ -158,7 +158,7 @@ def dotted_dict(
                     if delete:
                         # logger.debug(f"dotted_dict - delete {key} from {root_node} (value={old_value})")
                         del parent_obj[key]
-                    elif _value:
+                    elif _value != None:
                         # logger.debug(f"dotted_dict - set {key} to {value}")
                         # logger.debug(f"dotted_dict - _parent_obj={_parent_obj}")
                         # logger.debug(f"dotted_dict - _parent_key={_parent_key}")
@@ -171,7 +171,7 @@ def dotted_dict(
                     # logger.debug(f"dotted_dict - delete nothing")
                     # Nothing to delele
                     return None
-                elif _value:
+                elif _value != None:
                     # Set value
                     if len(path_keys) > 1:
                         # Branch node - create the key (part of the path)
@@ -231,7 +231,7 @@ def dotted_dict(
                     old_value = root_node[index_me]
                     if delete:
                         del root_node[index_me]
-                    elif _value:
+                    elif _value != None:
                         root_node[index_me] = _value
                     return old_value
             elif type(root_node) == dict:
@@ -265,7 +265,7 @@ def dotted_dict(
                     if delete:
                         for k in ndx_key_list:
                             del root_node[k]
-                    elif _value:
+                    elif _value != None:
                         # logger.debug(f"Error: Cannot set value for {key}[{indexes_str}]")
                         # return default
                         raise KeyError(f"Cannot set value for {key}[{indexes_str}]")
@@ -278,6 +278,47 @@ def dotted_dict(
 class PathDict(ABC):
     def __init__(self, data) -> None:
         self._data = data
+        data_type = type(self._data)
+        type_method_list = []
+        if data_type == dict:
+            type_method_list = [
+                "clear",
+                "copy",
+                "fromkeys",
+                "get",
+                "items",
+                "keys",
+                "pop",
+                "popitem",
+                "setdefault",
+                "update",
+                "values",
+            ]
+        elif data_type == list:
+            type_method_list = [
+                "append",
+                "clear",
+                "copy",
+                "count",
+                "extend",
+                "index",
+                "insert",
+                "pop",
+                "remove",
+                "reverse",
+                "sort",
+            ]
+
+        for type_method in type_method_list:
+            self.__dict__[type_method] = self._type_method(data_type, type_method)
+
+
+    def _type_method(self, type, method_name):
+        def method_wrapper(*args, **kwargs):
+            type_method = getattr(type, method_name)
+            # logger.debug(type_method)
+            return type_method(self.__dict__["_data"], *args, **kwargs)
+        return method_wrapper
 
 
     def __len__(self):
