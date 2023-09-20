@@ -1,5 +1,12 @@
 # Release Notes
 
+Version 0.12.4 2023-09-20
+- Refactor MagicO out of AttrDict and PathDict, and put it into a separate project
+- More typings with Union instead of Any
+- Remove URL from .auth() - so no URL change
+- Start user guide
+- Put DeepLog back
+
 Version 0.12.3 2023-09-16
 - General
   - Rename "route" to "path"

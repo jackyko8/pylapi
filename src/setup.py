@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="pylapi",
-    version="0.12.3",
+    version="0.12.5",
     author="Jacky Ko",
     author_email="",
     description="PyLapi - Python Lightweight API",
@@ -23,4 +23,7 @@ setuptools.setup(
     package_dir={"": "package"},
     packages=setuptools.find_packages(where="package"),
     python_requires=">=3.7",
+    install_requires=[
+        "magico>=0.3",
+    ],
 )

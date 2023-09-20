@@ -2,18 +2,18 @@ from __future__ import annotations
 import functools
 import sys
 import os
+import re
 import json
 import inspect
 import requests
 from enum import IntEnum
 from abc import ABC
-from typing import Any
+from typing import Any, Union
 from copy import deepcopy
 import logging
+from magico import MagicO
 # from http import HTTPStatus
 
-from .attr_dict import *
-from .path_dict import *
 
 sys.path.append(os.path.dirname(__file__))
 import config  # So that we can use the `config` namespace, e.g., config.<setting>
@@ -117,21 +117,21 @@ class PyLapi(ABC):
         return "/" + string if string else ""
 
 
-    def _rewrite_data(self, rewrite, data: dict=None) -> dict:
+    def _rewrite_data(self, rewrite: Union[str, dict], data: dict=None) -> dict:
         # `rewrite` is the "template" of what to return
         # `data` is where path attributes "$" is sourced from
         # `data` defaults to self._resource_data
         _data = data if data else self._resource_data
         if type(rewrite) == str:
             # A path to data, e.g., $.data.owner.login
-            return PathDict(_data)[rewrite]
+            return MagicO(_data)[rewrite]
 
         rewrite_str = json.dumps(rewrite)
         rewrite_var_names = re.findall(r'"(\$[^"]*)"', rewrite_str)
         logger.debug(f"rewrite_var_names={rewrite_var_names}")
         for rewrite_var_name in rewrite_var_names:
             logger.debug(f"rewrite_var_name={rewrite_var_name}")
-            rewrite_var_value = PathDict(_data)[rewrite_var_name]
+            rewrite_var_value = MagicO(_data)[rewrite_var_name]
             if type(rewrite_var_value) == str:
                 rewrite_var_value = f'"{rewrite_var_value}"'
             elif type(rewrite_var_value) in (dict, list):
@@ -181,7 +181,7 @@ class PyLapi(ABC):
         logger.debug(f"_obtain_request_args: data={data}")
         _data = data
         if _data != None:
-            if type(_data) in (AttrDict, PathDict):
+            if type(_data) == MagicO:
                 _data = _data.to_data()
             # Substitute any "$" attributes found with self._resource_data ones
             _data = self._rewrite_data(_data)
@@ -207,10 +207,10 @@ class PyLapi(ABC):
     def _obtain_request_function(
             self,
             method_path: str,
-            http_method: Any = None,
+            http_method: Union[HTTPMethod, str] = None,
             data: dict = None,
             headers: dict = None,
-            **query: Any
+            **query,
         ) -> function:
 
         logger.debug(f"_obtain_request_function(")
@@ -262,21 +262,27 @@ class PyLapi(ABC):
     # Class methods
     #
 
+    # @classmethod
+    # def auth(
+    #     cls,
+    #     auth: str = "",
+    #     url: str = "",
+    # ) -> None:
+    #     # logger.debug(f"auth")
+    #     if auth:
+    #         cls._pylapi_auth = auth
+    #     if url:
+    #         cls._pylapi_url = url
+
     @classmethod
-    def auth(
-        cls,
-        auth: str = "",
-        url: str = "",
-    ) -> None:
+    def auth(cls, auth: str) -> None:
         # logger.debug(f"auth")
         if auth:
             cls._pylapi_auth = auth
-        if url:
-            cls._pylapi_url = url
 
 
     @classmethod
-    def wash_secrets(cls, val: Any) -> Any:
+    def wash_secrets(cls, val: Union[str, dict, list]) -> Union[str, dict, list]:
         _val = val
         if _val != None:
             if cls._pylapi_auth:
@@ -290,10 +296,11 @@ class PyLapi(ABC):
                     # Convert back to original type
                     _val = json.loads(_val)
             else:
+                _val = "<not_authed>"
                 if type(val) == dict:
-                    _val = {"error": "<not_authed>"}
+                    _val = {"error": _val}
                 elif type(val) == list:
-                    _val = ["<not_authed>"]
+                    _val = [_val]
         return _val
 
 
@@ -310,6 +317,14 @@ class PyLapi(ABC):
 
     @classmethod
     def resource(cls, resource_name: str="", data: dict=None, **kwargs) -> PyLapi:
+        """To Create a resource object identified by the `resource_name`.
+
+        Args:
+            resource_name (str): The resource name for which the resource object is created.
+            data (dict): Initial resource data to load into the new resource object.
+
+        Returns: The resource object created.
+        """
         # logger.debug(f"resource: resource_name={resource_name}, data={data}, kwargs={kwargs}")
         _data = data if data != None else kwargs
         return cls._resource_class(resource_name)(resource_data=_data)
@@ -322,7 +337,7 @@ class PyLapi(ABC):
 
     def __getitem__(self, path) -> Any:
         # logger.debug(f"__getitem__: {path}")
-        item = PathDict(self._resource_data)[path]
+        item = MagicO(self._resource_data)[path]
         if type(item) == dict:
             item = deepcopy(item)
         return item
@@ -338,12 +353,12 @@ class PyLapi(ABC):
         if path == "" or path == "$" or path == "$.":
             self._resource_data = _value
         else:
-            PathDict(self._resource_data)[path] = _value
+            MagicO(self._resource_data)[path] = _value
 
 
     def __delitem__(self, path) -> None:
         # logger.debug(f"__delitem__: {type(path)} {path}")
-        del PathDict(self._resource_data)[path]
+        del MagicO(self._resource_data)[path]
 
 
     ############################################################
@@ -512,12 +527,13 @@ class PyLapi(ABC):
     @property
     def response_data(self):
         # logger.debug(f"get response_data: {self._response_data}")
+        # self._response_data is not necessarily self.raw_response.json() due to callback
         return self._response_data
 
 
     @property
     def data(self) -> dict:
-        return AttrDict(self._resource_data)
+        return MagicO(self._resource_data)
     # setting handled by __setattr__
 
 
@@ -602,18 +618,45 @@ class PyLapi(ABC):
     # Helpers methods
     #
 
+    # No content check. Child classes can provide their own check
+    def response_ok(self) -> bool:
+        logger.debug(f"Response status: {self._response.status_code}")
+        return self._response.ok
+        # _ok = False
+        # if self._response:
+        #     _status = self._response.status_code
+        #     _ok = (_status >= 200 and _status <= 299)
+        # return _ok
+
+
+    # Recursively remove all attributes of the specified name
+    def del_attr(self, attr_name: str, data: Any=None) -> Any:
+        _data = data
+        if _data == None:
+            # This block is executed only in the client call.
+            # self._resource_data will not be changed.
+            _data = self._resource_data
+        if type(_data) == dict:
+            return {_: self.del_attr(attr_name, _data[_]) for _ in _data if _ != attr_name}
+        elif type(_data) == list:
+            # Need to go deep
+            return [self.del_attr(attr_name, _) for _ in _data]
+        else:
+            return _data
+
+
     @classmethod
-    def getLogger(cls) -> str:
+    def getLogger(cls) -> logging.RootLogger:
         return logger
 
 
     @classmethod
-    def getLogLevel(cls) -> str:
+    def getLogLevel(cls) -> int:
         return cls._pylapi_log_level
 
 
     @classmethod
-    def setLogLevel(cls, log_level=None):
+    def setLogLevel(cls, log_level: int=None) -> None:
         if log_level != None:
             cls._pylapi_log_level = log_level
         logger.setLevel(cls._pylapi_log_level)
@@ -629,33 +672,6 @@ class PyLapi(ABC):
         if deep_log_level != None:
             cls._pylapi_deep_log_level = deep_log_level
         logger.setLevel(cls._pylapi_deep_log_level)
-
-
-    # No content check. Child classes can provide their own check
-    def response_ok(self):
-        logger.debug(f"Response status: {self._response.status_code}")
-        return self._response.ok
-        # _ok = False
-        # if self._response:
-        #     _status = self._response.status_code
-        #     _ok = (_status >= 200 and _status <= 299)
-        # return _ok
-
-
-    # Recursively remove all attributes of the specified name
-    def del_attr(self, attr_name: str, data=None):
-        _data = data
-        if _data == None:
-            # This block is executed only in the client call.
-            # self._resource_data will not be changed.
-            _data = self._resource_data
-        if type(_data) == dict:
-            return {_: self.del_attr(attr_name, _data[_]) for _ in _data if _ != attr_name}
-        elif type(_data) == list:
-            # Need to go deep
-            return [self.del_attr(attr_name, _) for _ in _data]
-        else:
-            return _data
 
 
     ############################################################

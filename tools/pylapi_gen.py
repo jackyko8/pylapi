@@ -19,7 +19,7 @@ import sys
 import os
 from enum import IntEnum
 from getopt import getopt, GetoptError
-from pylapi import PathDict, MagicWords
+from pylapi import MagicO, MagicWords
 
 # Defaults
 debug = False
@@ -59,7 +59,7 @@ def usage(exit_code=0):
 valid_guide_attrs = all_guide_attrs.union(control_guide_attrs)
 
 code_rewrite_lines = []
-snippets = PathDict({})
+snippets = MagicO({})
 
 # For naming conversion, use MagicWords(name).<conversion>, where <conversion> can be
 # snake, kebab, pascal (upperCamel), camel (lowerCamel), or singular
@@ -518,7 +518,7 @@ def print_guide(method):
                 ref = data[list(data.keys())[0]]
                 ref = re.sub(r"^#", "$", ref)
                 ref = re.sub(r"/", ".", ref)
-                return _deref(PathDict(oas_spec)[ref], oas_spec)
+                return _deref(MagicO(oas_spec)[ref], oas_spec)
         elif type(data) == list:
             return [_deref(_, oas_spec) for _ in data]
         else:
