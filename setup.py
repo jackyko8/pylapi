@@ -25,7 +25,10 @@ setuptools.setup(
     python_requires=">=3.7",
 
     install_requires=[
-        "magico>=0.3",
+        "magico>=0.3.3",
+        "urllib3>=1.21.1,<1.27",
+        "requests>=2.5",
+        "PyYAML>=5.1",
     ],
 
     project_urls={

@@ -1,5 +1,14 @@
 # Release Notes
 
+Version 0.12.8-10 2023-09-20
+- Test pip installing dependencies automatically
+
+Version 0.12.7 2023-09-20
+- After tested with magico 0.3.3
+
+Version 0.12.6 2023-09-20
+- Add extras_require
+
 Version 0.12.5 2023-09-20
 - Directory src restructuring
 
