@@ -1,5 +1,8 @@
 # Release Notes
 
+Version 0.12.5 2023-09-20
+- Directory src restructuring
+
 Version 0.12.4 2023-09-20
 - Refactor MagicO out of AttrDict and PathDict, and put it into a separate project
 - More typings with Union instead of Any
