@@ -19,7 +19,9 @@ import sys
 import os
 from enum import IntEnum
 from getopt import getopt, GetoptError
-from pylapi import MagicO, MagicWords
+from pylapi import MagicWords
+from magico import MagicO
+
 
 # Defaults
 debug = False

@@ -1,5 +1,9 @@
 # Release Notes
 
+Version 0.12.11 2023-10-10
+- Added docs
+- Updated some tutorials
+
 Version 0.12.8-10 2023-09-20
 - Test pip installing dependencies automatically
 
