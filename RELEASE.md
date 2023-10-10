@@ -1,8 +1,10 @@
 # Release Notes
 
-Version 0.12.11 2023-10-10
+Version 0.12.11-13 2023-10-10
 - Added docs
 - Updated some tutorials
+- Update pyproject.toml to install pylapi-autogen
+- pylapi-autogen -t to print the template
 
 Version 0.12.8-10 2023-09-20
 - Test pip installing dependencies automatically

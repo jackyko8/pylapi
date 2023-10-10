@@ -19,7 +19,6 @@ import sys
 import os
 from enum import IntEnum
 from getopt import getopt, GetoptError
-from pylapi import MagicWords
 from magico import MagicO
 
 
@@ -44,17 +43,18 @@ control_guide_attrs = {
 
 config_file = ""
 
-main_basename = os.path.basename(sys.argv[0])
+main_basename = os.path.basename(sys.argv[0]).rstrip('.py')
 
 def usage(exit_code=0):
     print(f"""Usage: {main_basename} [options ...] <config.py> [<openapi.json/yaml]
 \t-h --help           Print this help message
-\t-d --debug          Print all the methods to be generated then stop
 \t-o --output=<file>  Output the API SDK to <file> instead of stdout
 \t-g --guide=<list>   Include some OpenAI attributes as comments; the list is comma-deliminted list with no spaces.
 \t                    Valid attributes include: summary,description,parameters,request_body,all,ref
 \t                    `all` means to include all items on the list
-\t                    `ref` means to dereference $ref cells in OpenAI attributes""", file=sys.stderr)
+\t                    `ref` means to dereference $ref cells in OpenAI attributes
+\t-t --template       Print the autogen configuration template to stdout
+\t-d --debug          Print all the methods to be generated then stop""", file=sys.stderr)
     exit(exit_code)
 
 
@@ -674,7 +674,7 @@ def main():
 
     # Getopt - cannot load config for defaults until after getopt
     try:
-        opts, args = getopt(sys.argv[1:], "hdo:g:", ["help", "debug", "output=", "guide="])
+        opts, args = getopt(sys.argv[1:], "ho:g:td", ["help", "output=", "guide=", "template", "debug"])
     except GetoptError as err:
         print_error(err)
         usage(2)
@@ -682,8 +682,6 @@ def main():
     for _o, _a in opts:
         if _o in ("-h", "--help"):
             usage()
-        elif _o in ("-d", "--debug"):
-            debug = True
         elif _o in ("-o", "--output"):
             if _a == "-":
                 output_py = sys.stdout
@@ -703,6 +701,13 @@ def main():
                 # Cannot copy over guide_attrs as "ref" may be in
                 guide_attrs = guide_attrs.union(all_guide_attrs)
                 guide_attrs.remove("all")
+        elif _o in ("-t", "--template"):
+            import inspect
+            import autogen_template
+            print(inspect.getsource(autogen_template), end='')
+            exit(0)
+        elif _o in ("-d", "--debug"):
+            debug = True
         else:
             print_error("Invalid option: {_o}")
             usage(2)
