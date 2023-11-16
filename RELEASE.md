@@ -1,5 +1,10 @@
 # Release Notes
 
+Version 0.12.14-15 2023-11-16
+- Rename pylapi-gen to pylapi-autogen
+- Extract the PyLapi Overview to OVERVIEW.md (for PyPI)
+- Keep a brief installation in README.md (for GitHub)
+
 Version 0.12.11-13 2023-10-10
 - Added docs
 - Updated some tutorials

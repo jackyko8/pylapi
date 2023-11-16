@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pylapi"
 description = "Python Lightweight API (PyLapi)"
-readme = "README.md"
+readme = "OVERVIEW.md"
 urls.Changelog = "https://github.com/jackyko8/pylapi/blob/main/RELEASE.md"
 urls.Code = "https://github.com/jackyko8/pylapi"
 urls.Download = "https://pypi.org/project/pylapi/"

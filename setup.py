@@ -5,7 +5,7 @@ about = {}
 with open(f"{os.path.abspath(os.path.dirname(__file__))}/src/pylapi/__version__.py", "r") as f:
     exec(f.read(), about)
 
-with open("README.md", "r", encoding="utf-8") as f:
+with open("OVERVIEW.md", "r", encoding="utf-8") as f:
     long_description = f.read()
 
 setuptools.setup(
