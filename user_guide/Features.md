@@ -1,0 +1,26 @@
+# Features of PyLapi
+
+- API Creation
+  - Fully-automatic:
+    - Generate Python API from OpenAPI specification
+    - Inline API guide in the generated code
+    - Zero-code: all you need is "pass"
+  - Semi-automatic:
+    - Manually rewrite or extend the auto-generated code
+    - Generator embeds rewritten code into the API
+    - Repeatable when changes occur in OpenAPI specification or rewritten code
+  - Manual creationg of API when no OpenAPI specification available
+    - Integrate multiple APIs into a single Python API class
+    - One-line classes and methods (zero-code approach)
+    - Abstraction of common methods in root API class
+- Resource framework
+  - Resource as a data object (`load`)
+  - Request and response auto-rewrite (`send` and `give`)
+  - Resource attribute mapping
+  - Callbacks for request and response
+- Coder friendliness
+  - Naming flexibility: kebab, snake, pascal, camel, singular
+- Utilities
+  - AttrDict
+  - PathDict
+  - MagicWords
