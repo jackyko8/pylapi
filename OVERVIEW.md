@@ -1,6 +1,8 @@
 # PyLapi
 
-Python Lightweight API (PyLapi) is a Python API builder. It takes only a few seconds to automatically generate a Python API from OpenAPI specifications or less than an hour for an experienced Python developer to create a custom Python API.
+Python Lightweight API (PyLapi) is a Python API builder.
+
+It takes only a few seconds to automatically generate a Python API from OpenAPI specifications or less than an hour for an experienced Python developer to create a custom Python API.
 
 You can drive PyLapi in an [automatic](https://github.com/jackyko8/pylapi/tree/main/tutorials/2.%20How%20to%20use%20a%20PyLapi%20API.ipynb), [semiautomatic](https://github.com/jackyko8/pylapi/tree/main/tutorials/5.%20PyLapi%20Generator%20Automation.ipynb), or [manual](https://github.com/jackyko8/pylapi/tree/main/tutorials/3.%20A%20ChatGPT%20Conversation%20with%20PyLapi.ipynb) way.
 
@@ -109,5 +111,5 @@ pylapi-autogen myapi_config.py
 
 ## More Information
 
-PyLapi [tutorial](https://github.com/jackyko8/pylapi/blob/main/tutorials) and [user guide](https://github.com/jackyko8/pylapi/blob/main/user_guide) are available at [PyLapi](https://github.com/jackyko8/pylapi) GitHub repository.
+PyLapi [tutorial](https://github.com/jackyko8/pylapi/blob/main/tutorials) and [user guide](https://github.com/jackyko8/pylapi/blob/main/user_guide) are available at the [PyLapi](https://github.com/jackyko8/pylapi) GitHub repository.
 PyLapi API is documented on [Read the Docs](https://pylapi.readthedocs.io/).

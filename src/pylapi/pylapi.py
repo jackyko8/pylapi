@@ -28,7 +28,8 @@ logger.setLevel(config.log_level)
 # Literals
 #
 
-
+# Simulating the `http` module in Python 3.11
+# so that the code can work with a lower Python version
 class HTTPMethod(IntEnum):
     GET = 0
     HEAD = 1

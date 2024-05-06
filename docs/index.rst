@@ -45,7 +45,7 @@ The ``MyAPI`` API root class inherits the decorators ``@MyAPI.resource_class`` a
 More Information
 ================
 
-PyLapi `tutorial`_ and `user guide`_ are available at `PyLapi`_ GitHub repository.
+PyLapi `tutorial`_ and `user guide`_ are available at the `PyLapi`_ GitHub repository.
 
 .. _tutorial: https://github.com/jackyko8/pylapi/blob/main/tutorials
 .. _user guide: https://github.com/jackyko8/pylapi/blob/main/user_guide

@@ -1,5 +1,5 @@
 __name__ = "pylapi"
-__version__ = "0.12.15"
+__version__ = "0.12.16"
 __description__ = "PyLapi - Python Lightweight API"
 __url__ = "https://github.com/jackyko8/pylapi"
 __author__ = "Jacky Ko"
