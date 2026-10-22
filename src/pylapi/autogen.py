@@ -20,7 +20,7 @@ import os
 from enum import IntEnum
 from getopt import getopt, GetoptError
 from magico import MagicO
-
+from pylapi import MagicWords
 
 # Defaults
 debug = False
