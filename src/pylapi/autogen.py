@@ -20,7 +20,7 @@ import os
 from enum import IntEnum
 from getopt import getopt, GetoptError
 from magico import MagicO
-
+from pylapi import MagicWords
 
 # Defaults
 debug = False
@@ -645,7 +645,7 @@ def gen_resource_classes(config, methods, classes):
 
     # Handle left-over snippet classes
     snippets_flats = []
-    snippets_dict = snippets.to_dict()
+    snippets_dict = snippets.to_data()
     for snippet_class in snippets_dict:
         for snippet_code in snippets_dict[snippet_class]:
             snippets_flats.append(f"{snippet_class}.{snippet_code}")
