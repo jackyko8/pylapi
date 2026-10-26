@@ -26,7 +26,7 @@ setuptools.setup(
 
     install_requires=[
         "magico>=0.3.3",
-        "urllib3>=1.21.1,<1.27",
+        "urllib3>=1.26.16",
         "requests>=2.5",
         "PyYAML>=5.1",
     ],
